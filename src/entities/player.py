@@ -5,9 +5,43 @@ from src.entities.lantern import Lantern
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((TILE_SIZE, TILE_SIZE))
-        self.image.fill(BLUE)
-        self.rect = self.image.get_rect()
+        self.spritesheet = pygame.image.load("/Users/sittiaminah/Documents/SEMESTER 3/OOP/To-Be-The-Greatest-Witch/assets/spritesheets_walk.png").convert_alpha()
+
+        self.frame_width = 32
+        self.frame_height = 32
+
+        self.anim_down = [
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 0, 0),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 1, 0),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 2, 0),
+        ]
+
+        self.anim_up = [
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 0, 3),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 1, 3),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 2, 3),
+        ]
+
+        self.anim_left = [
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 0, 1),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 1, 1),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 2, 1),
+        ]
+
+        self.anim_right = [
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 0, 2),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 1, 2),
+            Player.get_frame(self.spritesheet, self.frame_width, self.frame_height, 2, 2),
+        ]
+
+        # Animasi awal
+        self.current_anim = self.anim_down
+        self.current_frame = 0
+        self.frame_timer = 0
+
+        # Set image awal
+        self.image = self.current_anim[self.current_frame]
+        self.rect = self.image.get_rect(topleft=(x, y))
         self.rect.topleft = (x, y)
         self.velocity = 5
         self.lantern = Lantern()
@@ -25,15 +59,21 @@ class Player(pygame.sprite.Sprite):
         # Toolbar: 9 slots, stores item names or None
         self.toolbar = [None] * 9 
         self.selected_slot = 0 # Index 0-8
+    
+    @staticmethod
+    def get_frame(sheet, frame_width, frame_height, fx, fy):
+        frame = pygame.Surface((frame_width, frame_height), pygame.SRCALPHA)
+        frame.blit(sheet, (0, 0), (fx * frame_width, fy * frame_height, frame_width, frame_height))
+        return frame
 
     def update(self):
-        # Update effects
+        # --- EFFECTS ---
         to_remove = []
         for effect, duration in self.effects.items():
             self.effects[effect] -= 1
             if self.effects[effect] <= 0:
                 to_remove.append(effect)
-        
+
         for effect in to_remove:
             del self.effects[effect]
             if effect == "Speed":
@@ -42,17 +82,45 @@ class Player(pygame.sprite.Sprite):
             elif effect == "Invisibility":
                 print("Invisibility effect wore off.")
 
-        # Update cooldowns - No longer frame based for teleport
-        
+        # --- MOVEMENT + ANIMATION ---
         keys = pygame.key.get_pressed()
+        moving = False
+
+        # Gerak kiri
         if keys[pygame.K_a]:
             self.rect.x -= self.velocity
-        if keys[pygame.K_d]:
+            self.current_anim = self.anim_left
+            moving = True
+
+        # Gerak kanan
+        elif keys[pygame.K_d]:
             self.rect.x += self.velocity
-        if keys[pygame.K_w]:
+            self.current_anim = self.anim_right
+            moving = True
+
+        # Gerak atas
+        elif keys[pygame.K_w]:
             self.rect.y -= self.velocity
-        if keys[pygame.K_s]:
+            self.current_anim = self.anim_up
+            moving = True
+
+        # Gerak bawah
+        elif keys[pygame.K_s]:
             self.rect.y += self.velocity
+            self.current_anim = self.anim_down
+            moving = True
+
+        # --- ANIMATE ---
+        if moving:
+            self.frame_timer += 1
+            if self.frame_timer >= 10:   # atur kecepatan animasi
+                self.frame_timer = 0
+                self.current_frame = (self.current_frame + 1) % len(self.current_anim)
+                self.image = self.current_anim[self.current_frame]
+        else:
+            # Idle → frame ke-0
+            self.current_frame = 0
+            self.image = self.current_anim[0]
 
     def add_item(self, item_name):
         # Check toolbar first
