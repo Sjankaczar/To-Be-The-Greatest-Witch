@@ -18,7 +18,7 @@
 
 ## Cara Menjalankan Project
 
-1. Clone repositori project `oop-bouncing-ball-pygame` ke direktori lokal Anda:
+1. Clone repositori project `To-Be-The-Greatest-Witch` ke direktori lokal Anda:
 
    ```bash
    git clone https://github.com/USERNAME/To-Be-The-Greatest-Witch.git
