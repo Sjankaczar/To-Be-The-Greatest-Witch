@@ -5,7 +5,23 @@ from src.entities.lantern import Lantern
 class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.spritesheet = pygame.image.load("/Users/sittiaminah/Documents/SEMESTER 3/OOP/To-Be-The-Greatest-Witch/assets/spritesheets_walk.png").convert_alpha()
+        import os
+        
+        # Dynamic path finding for assets
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        spritesheet_path = None
+        while True:
+            potential_path = os.path.join(current_dir, "assets", "spritesheets_walk.png")
+            if os.path.exists(potential_path):
+                spritesheet_path = potential_path
+                break
+            
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir: # Reached root
+                raise FileNotFoundError("Could not find assets/spritesheets_walk.png")
+            current_dir = parent_dir
+            
+        self.spritesheet = pygame.image.load(spritesheet_path).convert_alpha()
 
         self.frame_width = 32
         self.frame_height = 32
