@@ -50,3 +50,41 @@ FAIRY_RESEARCH_BOOST = 0.1 # 10% speed boost per fairy
 INSECT_SPAWN_CHANCE = 0.005 # 0.5% chance per frame
 AXE_DURABILITY = 3
 SAFE_ZONE_EXPANSION_AMOUNT = TILE_SIZE
+
+# Golem Settings
+GOLEM_SPEED = 2
+GOLEM_MAX_ENERGY = 100
+GOLEM_WATER_COST = 5
+GOLEM_EXPAND_COST = 20
+GOLEM_RECHARGE_RATE = 0.1
+
+# Rank Unlocks
+RANK_UNLOCKS = {
+    1: {
+        "features": ["Crafting", "Shop"],
+        "recipes": ["Health Potion", "Mana Potion", "Intelligence Potion", "Rank Up Potion"],
+        "shop": ["Health Potion", "Mana Potion", "Red Herb", "Blue Herb"] # Basic herbs sellable
+    },
+    2: {
+        "features": ["Farming"],
+        "recipes": ["Speed Potion", "Red Seed", "Blue Seed"],
+        "shop": ["Speed Potion", "Hoe", "Watering Can", "Bug Net"]
+    },
+    3: {
+        "features": ["Golems"],
+        "recipes": ["Invisibility Potion", "Wood Golem"],
+        "shop": ["Axe"]
+    },
+    4: {
+        "features": ["Research", "Fairies"],
+        "recipes": ["Rare Seed"], # Rare Seed requires research + Rank 4
+        "shop": ["Intelligence Potion", "Rank Up Potion"] # Advanced potions in shop
+    }
+}
+
+RANK_INTEL_CAPS = {
+    1: 25,
+    2: 50,
+    3: 90
+    # Rank 4+ has dynamic cap (equal to current)
+}

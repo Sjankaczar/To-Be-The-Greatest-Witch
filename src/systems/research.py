@@ -25,7 +25,7 @@ class ResearchSystem:
             self.research_duration = duration * 60 # Frames
             self.research_timer = 0
             
-    def update(self, intelligence, fairies_caught=0):
+    def update(self, intelligence, fairies_caught=0, spawn_fairies=False):
         if self.current_research:
             # Base speed + Fairy Boost
             speed = 1 + (fairies_caught * FAIRY_RESEARCH_BOOST)

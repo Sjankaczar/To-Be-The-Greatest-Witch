@@ -130,7 +130,7 @@ class ExplorationState(GameState):
             self.items.add(item)
             
         # Spawn Fairies
-        if random.random() < FAIRY_SPAWN_CHANCE:
+        if self.game.player.rank >= 4 and random.random() < FAIRY_SPAWN_CHANCE:
             x = self.game.player.rect.x + random.randint(-400, 400)
             y = self.game.player.rect.y + random.randint(-300, 300)
             fairy = Fairy(x, y)

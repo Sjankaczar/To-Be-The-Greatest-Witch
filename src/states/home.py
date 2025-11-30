@@ -7,7 +7,9 @@ from src.systems.shop import ShopSystem
 from src.systems.research import ResearchSystem
 from src.systems.farming import FarmingSystem
 from src.utils.ui import Button
+from src.utils.ui import Button
 from src.utils.camera import Camera
+from src.entities.golem import Golem
 
 class HomeState(GameState):
     def __init__(self, game):
@@ -27,7 +29,13 @@ class HomeState(GameState):
         self.map_width = self.base_map_width
         self.map_height = self.base_map_height
         self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
+        self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
         self.camera = Camera(self.map_width, self.map_height)
+        
+        # Golems
+        self.golems = pygame.sprite.Group()
+        self.expansion_queue = [] # List of (grid_x, grid_y)
+        self.command_mode = False
         
         # Initialize Player Position in Home
         self.game.player.rect.topleft = (self.map_width // 2, self.map_height // 2)
@@ -76,7 +84,7 @@ class HomeState(GameState):
         self.recipe_buttons = []
         y = 115
         
-        recipes = self.crafting_system.recipes.get(self.crafting_tab, {})
+        recipes = self.crafting_system.get_all_recipes(self.crafting_tab)
         for recipe in recipes:
             self.recipe_buttons.append(Button(450, y, 200, 30, recipe, self.font))
             y += 35
@@ -96,7 +104,7 @@ class HomeState(GameState):
         self.btn_shop_sell_tab = Button(0, 0, 100, 30, "Sell", self.font)
         self.btn_close_shop = Button(0, 0, 30, 30, "X", self.font, color=RED, text_color=WHITE)
         
-        self.shop_items_buy = ["Health Potion", "Mana Potion", "Speed Potion", "Hoe", "Watering Can", "Bug Net", "Axe"]
+        self.shop_items_buy = self.shop_system.get_all_items()
         self.shop_buy_buttons = []
         for item in self.shop_items_buy:
             self.shop_buy_buttons.append(Button(0, 0, 200, 30, f"{item} ({PRICES.get(item, 0)}G)", self.font))
@@ -104,6 +112,7 @@ class HomeState(GameState):
         self.shop_sell_buttons = [] # Dynamic based on inventory
         self.selected_shop_item = None
         self.btn_shop_action = Button(0, 0, 100, 40, "Buy", self.font, color=YELLOW, text_color=BLACK)
+        self.shop_scroll_y = 0
 
     def enter(self):
         print("Entering Home State")
@@ -137,6 +146,11 @@ class HomeState(GameState):
                         else:
                             # Use Item (Fallback if not harvesting)
                             self.game.player.use_item()
+                            
+                # Toggle Command Mode (G)
+                if event.key == pygame.K_g:
+                    self.command_mode = not self.command_mode
+                    print(f"Command Mode: {'ON' if self.command_mode else 'OFF'}")
 
             # Crafting UI Events
             if self.show_recipes:
@@ -164,6 +178,12 @@ class HomeState(GameState):
                         if not hasattr(self, 'crafting_scroll_y'):
                             self.crafting_scroll_y = 0
                         self.crafting_scroll_y -= event.y * 20 # Scroll speed
+                        
+                        # Clamp Scroll
+                        list_height = 175
+                        total_height = len(self.recipe_buttons) * 35
+                        max_scroll = max(0, total_height - list_height)
+                        self.crafting_scroll_y = max(0, min(self.crafting_scroll_y, max_scroll))
                 
                 # Recipe Selection
                 # Check if click is within list area
@@ -175,7 +195,9 @@ class HomeState(GameState):
                     
                     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         if list_rect.collidepoint(event.pos):
-                            # Let's manually check collision with offset
+                            if not hasattr(self, 'crafting_scroll_y'):
+                                self.crafting_scroll_y = 0
+                                
                             mouse_x, mouse_y = event.pos
                             relative_y = mouse_y - list_rect.y + self.crafting_scroll_y
                             
@@ -359,8 +381,11 @@ class HomeState(GameState):
                     self.show_inventory = True # Open inventory too for convenience
                     print("Opened Shop")
                 elif player_rect.colliderect(self.research_rect):
-                    self.show_research = True
-                    print("Opened Research Center")
+                    if self.game.player.rank >= 4:
+                        self.show_research = True
+                        print("Opened Research Center")
+                    else:
+                        print("Research Center unlocks at Rank 4!")
                     
             # Shop UI Events
             if self.show_shop:
@@ -371,11 +396,18 @@ class HomeState(GameState):
                     self.shop_tab = "buy"
                     self.selected_shop_item = None
                     self.btn_shop_action.text = "Buy"
+                    self.shop_scroll_y = 0 # Reset scroll
+                    # Refresh buy list (Show all)
+                    self.shop_items_buy = self.shop_system.get_all_items()
+                    self.shop_buy_buttons = []
+                    for item in self.shop_items_buy:
+                        self.shop_buy_buttons.append(Button(0, 0, 200, 30, f"{item} ({PRICES.get(item, 0)}G)", self.font))
                     
                 if self.btn_shop_sell_tab.handle_event(event):
                     self.shop_tab = "sell"
                     self.selected_shop_item = None
                     self.btn_shop_action.text = "Sell"
+                    self.shop_scroll_y = 0 # Reset scroll
                     # Refresh sell buttons
                     self.shop_sell_buttons = []
                     y_offset = 0
@@ -383,29 +415,63 @@ class HomeState(GameState):
                         price = PRICES.get(item, 0) // 2
                         self.shop_sell_buttons.append(Button(0, 0, 200, 30, f"{item} x{count} ({price}G)", self.font))
                 
-                # Handle Item Selection
-                if self.shop_tab == "buy":
-                    for i, btn in enumerate(self.shop_buy_buttons):
-                        if btn.handle_event(event):
-                            self.selected_shop_item = self.shop_items_buy[i]
-                elif self.shop_tab == "sell":
-                    # Rebuild sell buttons list to match current inventory state for index matching
-                    current_inv_items = list(self.game.player.inventory.keys())
-                    for i, btn in enumerate(self.shop_sell_buttons):
-                        if btn.handle_event(event):
-                            if i < len(current_inv_items):
-                                self.selected_shop_item = current_inv_items[i]
+                # Scroll Handling
+                if event.type == pygame.MOUSEWHEEL:
+                    if hasattr(self, 'shop_ui_screen_rect') and self.shop_ui_screen_rect.collidepoint(pygame.mouse.get_pos()):
+                        self.shop_scroll_y -= event.y * 20 # Scroll speed
+                        
+                        # Clamp Scroll
+                        list_height = 250
+                        item_height = 35
+                        num_items = 0
+                        if self.shop_tab == "buy":
+                            num_items = len(self.shop_buy_buttons)
+                        elif self.shop_tab == "sell":
+                            num_items = len(self.shop_sell_buttons)
+                            
+                        total_content_height = num_items * item_height
+                        max_scroll = max(0, total_content_height - list_height)
+                        
+                        if self.shop_scroll_y < 0:
+                            self.shop_scroll_y = 0
+                        elif self.shop_scroll_y > max_scroll:
+                            self.shop_scroll_y = max_scroll
+                        
+                # Handle Item Selection (with scroll)
+                if hasattr(self, 'shop_ui_screen_rect'):
+                    rect = self.shop_ui_screen_rect
+                    list_rect = pygame.Rect(rect.x + 20, rect.y + 80, rect.width - 40, 250)
+                    
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        if list_rect.collidepoint(event.pos):
+                            mouse_x, mouse_y = event.pos
+                            relative_y = mouse_y - list_rect.y + self.shop_scroll_y
+                            
+                            index = relative_y // 35
+                            
+                            if self.shop_tab == "buy":
+                                if 0 <= index < len(self.shop_buy_buttons):
+                                    self.selected_shop_item = self.shop_items_buy[index]
+                            elif self.shop_tab == "sell":
+                                current_inv_items = list(self.game.player.inventory.keys())
+                                if 0 <= index < len(current_inv_items):
+                                    self.selected_shop_item = current_inv_items[index]
                             
                 # Handle Action (Buy/Sell)
                 if self.selected_shop_item and self.btn_shop_action.handle_event(event):
                     if self.shop_tab == "buy":
-                        price = PRICES.get(self.selected_shop_item, 0)
-                        if self.game.player.gold >= price:
-                            self.game.player.gold -= price
-                            self.game.player.add_item(self.selected_shop_item)
-                            print(f"Bought {self.selected_shop_item} for {price}G")
+                        # Check Rank
+                        req_rank = self.shop_system.get_required_rank(self.selected_shop_item)
+                        if self.game.player.rank >= req_rank:
+                            price = PRICES.get(self.selected_shop_item, 0)
+                            if self.game.player.gold >= price:
+                                self.game.player.gold -= price
+                                self.game.player.add_item(self.selected_shop_item)
+                                print(f"Bought {self.selected_shop_item} for {price}G")
+                            else:
+                                print("Not enough gold!")
                         else:
-                            print("Not enough gold!")
+                            print(f"Item locked! Unlocks at Rank {req_rank}")
                     elif self.shop_tab == "sell":
                         if self.selected_shop_item in self.game.player.inventory:
                             price = PRICES.get(self.selected_shop_item, 0) // 2
@@ -421,13 +487,32 @@ class HomeState(GameState):
 
             # Tool Usage (Mouse Click)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                # Check if mouse is on any UI
                 if self.is_mouse_on_ui(event.pos):
                     # If on UI, do not use tools.
-                    # But we must ensure we don't return from the loop if there are other handlers?
-                    # Actually, if we are on UI, we probably handled it in the UI blocks above.
-                    # So we can just skip tool usage.
                     pass
+                elif self.command_mode:
+                    # Command Mode Logic (Queue Expansion)
+                    mouse_x, mouse_y = event.pos
+                    world_x = mouse_x - self.camera.camera.x
+                    world_y = mouse_y - self.camera.camera.y
+                    
+                    tile_x = (world_x // TILE_SIZE)
+                    tile_y = (world_y // TILE_SIZE)
+                    
+                    # Check if valid expansion target (not in base, not in extra, adjacent to existing?)
+                    # For simplicity, just check if not already safe
+                    in_base_rect = (0 <= tile_x * TILE_SIZE < self.base_map_width) and (0 <= tile_y * TILE_SIZE < self.base_map_height)
+                    is_extra = (tile_x * TILE_SIZE, tile_y * TILE_SIZE) in self.extra_tiles
+                    
+                    if not in_base_rect and not is_extra:
+                        if (tile_x, tile_y) not in self.expansion_queue:
+                            self.expansion_queue.append((tile_x, tile_y))
+                            print(f"Queued expansion at ({tile_x}, {tile_y})")
+                        else:
+                            print("Already queued.")
+                    else:
+                        print("Tile is already safe.")
+                        
                 else:
                     # Convert mouse pos to world pos
                     mouse_x, mouse_y = event.pos
@@ -501,6 +586,15 @@ class HomeState(GameState):
                                             print(f"Planted {item_name}!")
                                 else:
                                     print("Cannot plant: Research required.")
+                            
+                            elif item_name == "Wood Golem":
+                                # Spawn Golem
+                                golem = Golem(world_x, world_y, self)
+                                self.golems.add(golem)
+                                selected_item['count'] -= 1
+                                if selected_item['count'] <= 0:
+                                    self.game.player.toolbar[selected_slot_index] = None
+                                print("Spawned Wood Golem!")
 
     def update(self):
         # Crafting Logic
@@ -512,10 +606,15 @@ class HomeState(GameState):
                 self.crafting_target = None
                 
         # Research Logic
-        self.research_system.update(self.game.player.intelligence, self.game.player.fairies_caught)
+        # Fairies only spawn if Rank >= 4
+        fairies_spawn = self.game.player.rank >= 4
+        self.research_system.update(self.game.player.intelligence, self.game.player.fairies_caught, spawn_fairies=fairies_spawn)
         
         # Farming Logic
         self.farming_system.update()
+        
+        # Golem Logic
+        self.golems.update()
         
         # Update Player (Movement & Animation)
         prev_rect = self.game.player.rect.copy()
@@ -696,6 +795,26 @@ class HomeState(GameState):
             highlight_surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
             highlight_surf.fill(highlight_color)
             screen.blit(highlight_surf, self.camera.apply_rect(pygame.Rect(tile_x, tile_y, TILE_SIZE, TILE_SIZE)))
+            
+        # Draw Command Mode Highlight
+        if self.command_mode:
+            mouse_pos = pygame.mouse.get_pos()
+            world_x = mouse_pos[0] - self.camera.camera.x
+            world_y = mouse_pos[1] - self.camera.camera.y
+            
+            tile_x = (world_x // TILE_SIZE) * TILE_SIZE
+            tile_y = (world_y // TILE_SIZE) * TILE_SIZE
+            
+            in_base_rect = (0 <= tile_x < self.base_map_width) and (0 <= tile_y < self.base_map_height)
+            is_extra = (tile_x, tile_y) in self.extra_tiles
+            
+            highlight_color = (255, 0, 0, 128) # Red (Invalid)
+            if not in_base_rect and not is_extra:
+                highlight_color = (0, 255, 0, 128) # Green (Valid)
+                
+            highlight_surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            highlight_surf.fill(highlight_color)
+            screen.blit(highlight_surf, self.camera.apply_rect(pygame.Rect(tile_x, tile_y, TILE_SIZE, TILE_SIZE)))
         
         # Draw Farming Grid (Farmland and Crops)
         for key, tile in self.farming_system.grid.items():
@@ -767,12 +886,51 @@ class HomeState(GameState):
             screen.blit(self.game.player.image, self.camera.apply_rect(self.game.player.rect))
         else:
             pygame.draw.rect(screen, BLUE, self.camera.apply_rect(self.game.player.rect))
+            
+        # Draw Golems
+        for golem in self.golems:
+            screen.blit(golem.image, self.camera.apply_rect(golem.rect))
+            
+        # Draw Expansion Queue (Ghost Tiles)
+        for tile_pos in self.expansion_queue:
+            rect = pygame.Rect(tile_pos[0] * TILE_SIZE, tile_pos[1] * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            s.fill((255, 255, 0, 100)) # Yellow transparent
+            screen.blit(s, self.camera.apply_rect(rect))
         
         # --- UI LAYER (Screen Space) ---
         
         # Draw UI Title
         title = self.title_font.render("Home Sweet Home", True, WHITE)
         screen.blit(title, (SCREEN_WIDTH // 2 - 150, 30))
+        
+        # Draw Stats UI (Left of Toolbar)
+        stats_x = 20
+        stats_y = SCREEN_HEIGHT - 120
+        pygame.draw.rect(screen, (50, 50, 50), (stats_x, stats_y, 150, 100))
+        pygame.draw.rect(screen, WHITE, (stats_x, stats_y, 150, 100), 2)
+        
+        rank_text = self.font.render(f"Rank: {self.game.player.rank}", True, WHITE)
+        gold_text = self.font.render(f"Gold: {self.game.player.gold}", True, YELLOW)
+        
+        # Intel Cap Logic
+        current_intel = int(self.game.player.intelligence)
+        rank = self.game.player.rank
+        if rank >= 4:
+            cap = current_intel
+        else:
+            cap = RANK_INTEL_CAPS.get(rank, 25)
+            
+        intel_text = self.font.render(f"Intel: {current_intel}/{cap}", True, (100, 100, 255))
+        
+        screen.blit(rank_text, (stats_x + 10, stats_y + 10))
+        screen.blit(gold_text, (stats_x + 10, stats_y + 40))
+        screen.blit(intel_text, (stats_x + 10, stats_y + 70))
+        
+        # Draw Command Mode Indicator
+        if self.command_mode:
+            cmd_text = self.font.render("COMMAND MODE (Click to Expand)", True, (255, 255, 0))
+            screen.blit(cmd_text, (SCREEN_WIDTH // 2 - 150, 70))
         
         # Draw Buttons (Only Inventory is persistent UI)
         # Position Inventory Button at bottom right or somewhere convenient
@@ -868,9 +1026,14 @@ class HomeState(GameState):
                         screen.blit(ing_text, (rect.x + 20, ing_y))
                         ing_y += 25
                         
-                    # Draw Craft Button
-                    self.btn_craft.rect.topleft = (rect.centerx - 50, rect.bottom - 50)
-                    self.btn_craft.draw(screen)
+                    # Draw Craft Button or Lock Message
+                    req_rank = self.crafting_system.get_required_rank(self.selected_recipe)
+                    if self.game.player.rank >= req_rank:
+                        self.btn_craft.rect.topleft = (rect.centerx - 50, rect.bottom - 50)
+                        self.btn_craft.draw(screen)
+                    else:
+                        lock_text = self.font.render(f"Unlocked at Rank {req_rank}", True, RED)
+                        screen.blit(lock_text, (rect.centerx - lock_text.get_width()//2, rect.bottom - 50))
                     
                     # Draw Progress Bar
                     if self.crafting_timer > 0 and self.crafting_target == self.selected_recipe:
@@ -910,21 +1073,38 @@ class HomeState(GameState):
                 else:
                     pygame.draw.rect(screen, YELLOW, self.btn_shop_sell_tab.rect, 2)
                     
-                # Draw List
+                # Draw List (Clipped)
+                list_rect = pygame.Rect(rect.x + 20, rect.y + 80, rect.width - 40, 250)
+                screen.set_clip(list_rect)
+                
+                start_y = list_rect.y - self.shop_scroll_y
+                
                 if self.shop_tab == "buy":
-                    for btn in self.shop_buy_buttons:
+                    for i, btn in enumerate(self.shop_buy_buttons):
+                        btn.rect.topleft = (rect.x + 50, start_y + i * 35)
                         btn.draw(screen)
                 elif self.shop_tab == "sell":
                     if not self.shop_sell_buttons:
                         empty_text = self.font.render("Inventory Empty", True, WHITE)
                         screen.blit(empty_text, (rect.centerx - empty_text.get_width()//2, rect.centery))
-                    for btn in self.shop_sell_buttons:
+                    for i, btn in enumerate(self.shop_sell_buttons):
+                        btn.rect.topleft = (rect.x + 50, start_y + i * 35)
                         btn.draw(screen)
+                        
+                screen.set_clip(None) # Reset clip
                         
                 # Draw Selected Item Details
                 if self.selected_shop_item:
-                    # Draw Action Button
-                    self.btn_shop_action.draw(screen)
+                    # Draw Action Button or Lock Message
+                    if self.shop_tab == "buy":
+                        req_rank = self.shop_system.get_required_rank(self.selected_shop_item)
+                        if self.game.player.rank >= req_rank:
+                            self.btn_shop_action.draw(screen)
+                        else:
+                            lock_text = self.font.render(f"Unlocked at Rank {req_rank}", True, RED)
+                            screen.blit(lock_text, (rect.centerx - lock_text.get_width()//2, 410)) # Adjust Y as needed
+                    else:
+                        self.btn_shop_action.draw(screen)
                     
                     # Draw Selection Highlight
                     # Find button for selected item

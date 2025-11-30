@@ -74,26 +74,30 @@ class Player(pygame.sprite.Sprite):
         
         # Player Stats
         self.rank = 1
-        self.intelligence = 10
+        self.intelligence = 24
         self.brain_shape = "Smooth" # Flavor text
         self.fairies_caught = 0
         
         # Toolbar: 9 slots, stores item names or None
         self.toolbar = [None] * 9 
         self.selected_slot = 0 # Index 0-8
+        # self.rank = 3 # Removed duplicate assignment
         
         # Starting Items (Dev Helper)
-        self.gold = 500
-        self.inventory["Red Herb"] = 5
-        self.inventory["Blue Herb"] = 5
-        self.inventory["Health Potion"] = 3
+        self.gold = 10000
+        self.inventory["Red Herb"] = 99
+        self.inventory["Blue Herb"] = 99
+        self.inventory["Health Potion"] = 5
         self.inventory["Hoe"] = 1
         self.inventory["Watering Can"] = 1
+        self.inventory["Water"] = 99
         
         # Add some to toolbar for convenience
-        self.toolbar[0] = {'name': 'Hoe', 'count': 1}
-        self.toolbar[1] = {'name': 'Watering Can', 'count': 1}
+        self.toolbar[0] = {'name': 'Watering Can', 'count': 1}
+        self.toolbar[1] = {'name': 'Hoe', 'count': 1}
         self.toolbar[2] = {'name': 'Health Potion', 'count': 3}
+        self.toolbar[3] = {'name': 'Intelligence Potion', 'count': 99}
+        self.toolbar[4] = {'name': 'Rank Up Potion', 'count': 9}
     
     @staticmethod
     def get_frame(sheet, frame_width, frame_height, fx, fy):
@@ -224,10 +228,32 @@ class Player(pygame.sprite.Sprite):
             used = True
         elif item_name == "Intelligence Potion":
             self.effects["Intelligence"] = 1200 # 20 seconds
-            self.intelligence += 10
+            
+            # Calculate potential new intelligence
+            increase = 10
+            new_intel = self.intelligence + increase
+            
+            # Apply Rank Cap
+            if self.rank < 4:
+                cap = RANK_INTEL_CAPS.get(self.rank, 25)
+                self.intelligence = min(new_intel, cap)
+            else:
+                self.intelligence = new_intel
+                
             print(f"Used Intelligence Potion! Intelligence: {self.intelligence}")
             used = True
         elif item_name == "Rank Up Potion":
+            # Check Max Rank (Temporary Limit: Rank 4)
+            if self.rank >= 4:
+                print("Max Rank Reached (for now)!")
+                return False
+                
+            # Check Intelligence Requirement
+            req_intel = RANK_INTEL_CAPS.get(self.rank, 999)
+            if self.intelligence < req_intel:
+                print(f"Not enough Intelligence! Need {req_intel} to Rank Up.")
+                return False
+                
             if self.rank < 9:
                 self.rank += 1
                 self.intelligence += 5 # Permanent boost

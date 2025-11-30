@@ -50,3 +50,24 @@
     - **Axe**: Available in the Shop. Used to create new Safe Zone tiles in the Home area (Durability: 3). Each use converts a 32x32 Forest tile to Safe Zone.
 - **Exploration**:
     - Added **Insects**: Slow-moving creatures that can be caught with a Bug Net.
+- **Rank System Implementation**:
+    - **Rank Progression**: Players start at Rank 1 and can progress up to Rank 4 (current max).
+    - **Rank Unlocks**:
+        - **Rank 1**: Basic Crafting & Shop.
+        - **Rank 2**: Farming Features (Seeds, Tools).
+        - **Rank 3**: Golem Crafting (Wood Golem).
+        - **Rank 4**: Research Center & Fairy Spawning.
+    - **Intelligence Caps**:
+        - Rank 1: Cap 25.
+        - Rank 2: Cap 50.
+        - Rank 3: Cap 90.
+        - Rank 4: Dynamic Cap (Current Intelligence).
+    - **Rank Up Potion**: Can only be used if Intelligence reaches the current Rank's cap.
+- **UI Improvements**:
+    - **Locked Items**: Locked items in Shop/Crafting are now visible but disabled, showing "Unlocked at Rank X".
+    - **Stats UI**: Added Rank and Intelligence display (Current/Cap).
+    - **Scrolling**: Added scrolling support for Shop and Crafting lists.
+- **Fixes**:
+    - **Fairy Spawning**: Forest Fairies now only spawn at Rank 4+.
+    - **Potion Overdose**: Intelligence Potion usage is capped by Rank limits.
+    - **Crafting UI**: Fixed selection and rendering issues with scrolling.

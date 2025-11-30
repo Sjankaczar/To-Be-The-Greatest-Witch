@@ -1,3 +1,5 @@
+from src.config import RANK_UNLOCKS
+
 class CraftingSystem:
     def __init__(self):
         # Categories
@@ -26,7 +28,28 @@ class CraftingSystem:
             return self.recipes[category][item_name]
         return None
 
+    def get_available_recipes(self, category, player_rank):
+        # Deprecated for UI list, but useful for logic if needed. 
+        # Now we show all and lock them in UI.
+        return self.get_all_recipes(category)
+
+    def get_all_recipes(self, category):
+        if category in self.recipes:
+            return list(self.recipes[category].keys())
+        return []
+
+    def get_required_rank(self, item_name):
+        for rank, data in RANK_UNLOCKS.items():
+            if item_name in data.get("recipes", []):
+                return rank
+        return 1 # Default to 1 if not found in unlocks (basic items)
+
     def can_craft(self, player, category, item_name):
+        # Check Rank
+        req_rank = self.get_required_rank(item_name)
+        if player.rank < req_rank:
+            return False
+            
         recipe = self.get_recipe(category, item_name)
         if not recipe:
             return False
