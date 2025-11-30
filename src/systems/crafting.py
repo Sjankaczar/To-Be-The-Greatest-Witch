@@ -1,40 +1,68 @@
 class CraftingSystem:
     def __init__(self):
-        # Recipe format: {Ingredient: Count}, CraftTime (seconds)
+        # Categories
         self.recipes = {
-            "Health Potion": ({"Red Herb": 2, "Water": 1}, 3),
-            "Mana Potion": ({"Blue Herb": 2, "Water": 1}, 3),
-            "Invisibility Potion": ({"Blue Herb": 3, "Water": 1}, 5),
-            "Speed Potion": ({"Red Herb": 3, "Water": 1}, 5)
+            "Potions": {
+                "Health Potion": ({"Red Herb": 2, "Water": 1}, 3),
+                "Mana Potion": ({"Blue Herb": 2, "Water": 1}, 3),
+                "Invisibility Potion": ({"Blue Herb": 3, "Water": 1}, 5),
+                "Speed Potion": ({"Red Herb": 3, "Water": 1}, 5),
+                "Intelligence Potion": ({"Blue Herb": 2, "Red Herb": 1}, 5),
+                "Rank Up Potion": ({"Blue Herb": 5, "Red Herb": 5, "Water": 5}, 10)
+            },
+            "Seeds": {
+                "Red Seed": ({"Red Herb": 1, "Gold": 10}, 2),
+                "Blue Seed": ({"Blue Herb": 1, "Gold": 10}, 2),
+                "Rare Seed": ({"Rare Herb": 1, "Gold": 50}, 5)
+            },
+            "Golems": {
+                # Placeholder for now
+                "Wood Golem": ({"Red Herb": 10, "Gold": 100}, 10) 
+            }
         }
 
-    def can_craft(self, inventory, potion_name):
-        if potion_name not in self.recipes:
+    def get_recipe(self, category, item_name):
+        if category in self.recipes and item_name in self.recipes[category]:
+            return self.recipes[category][item_name]
+        return None
+
+    def can_craft(self, player, category, item_name):
+        recipe = self.get_recipe(category, item_name)
+        if not recipe:
             return False
         
-        ingredients, _ = self.recipes[potion_name]
+        ingredients, _ = recipe
         for item, count in ingredients.items():
-            if inventory.get(item, 0) < count:
-                return False
+            if item == "Gold":
+                if player.gold < count:
+                    return False
+            else:
+                if player.inventory.get(item, 0) < count:
+                    return False
         return True
 
-    def craft(self, inventory, potion_name):
-        if not self.can_craft(inventory, potion_name):
+    def craft(self, player, category, item_name):
+        if not self.can_craft(player, category, item_name):
             return False
         
-        ingredients, _ = self.recipes[potion_name]
+        ingredients, _ = self.get_recipe(category, item_name)
         
         # Consume ingredients
         for item, count in ingredients.items():
-            inventory[item] -= count
-            if inventory[item] == 0:
-                del inventory[item]
+            if item == "Gold":
+                player.gold -= count
+            else:
+                player.inventory[item] -= count
+                if player.inventory[item] == 0:
+                    del player.inventory[item]
         
-        # Add potion
-        if potion_name in inventory:
-            inventory[potion_name] += 1
+        # Add item
+        # Seeds and Golems might need special handling if they are not just inventory items
+        # For now, assume they are items
+        if item_name in player.inventory:
+            player.inventory[item_name] += 1
         else:
-            inventory[potion_name] = 1
+            player.inventory[item_name] = 1
             
-        print(f"Crafted {potion_name}!")
+        print(f"Crafted {item_name}!")
         return True

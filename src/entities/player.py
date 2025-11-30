@@ -72,9 +72,28 @@ class Player(pygame.sprite.Sprite):
         
         self.teleport_cooldown_end = 0.0 # Timestamp
         
+        # Player Stats
+        self.rank = 1
+        self.intelligence = 10
+        self.brain_shape = "Smooth" # Flavor text
+        self.fairies_caught = 0
+        
         # Toolbar: 9 slots, stores item names or None
         self.toolbar = [None] * 9 
         self.selected_slot = 0 # Index 0-8
+        
+        # Starting Items (Dev Helper)
+        self.gold = 500
+        self.inventory["Red Herb"] = 5
+        self.inventory["Blue Herb"] = 5
+        self.inventory["Health Potion"] = 3
+        self.inventory["Hoe"] = 1
+        self.inventory["Watering Can"] = 1
+        
+        # Add some to toolbar for convenience
+        self.toolbar[0] = {'name': 'Hoe', 'count': 1}
+        self.toolbar[1] = {'name': 'Watering Can', 'count': 1}
+        self.toolbar[2] = {'name': 'Health Potion', 'count': 3}
     
     @staticmethod
     def get_frame(sheet, frame_width, frame_height, fx, fy):
@@ -97,34 +116,46 @@ class Player(pygame.sprite.Sprite):
                 print("Speed effect wore off.")
             elif effect == "Invisibility":
                 print("Invisibility effect wore off.")
+            elif effect == "Intelligence":
+                self.intelligence -= 10
+                print("Intelligence effect wore off.")
 
         # --- MOVEMENT + ANIMATION ---
         keys = pygame.key.get_pressed()
         moving = False
+        
+        dx = 0
+        dy = 0
 
-        # Gerak kiri
         if keys[pygame.K_a]:
-            self.rect.x -= self.velocity
-            self.current_anim = self.anim_left
+            dx -= 1
+        if keys[pygame.K_d]:
+            dx += 1
+        if keys[pygame.K_w]:
+            dy -= 1
+        if keys[pygame.K_s]:
+            dy += 1
+            
+        if dx != 0 or dy != 0:
             moving = True
-
-        # Gerak kanan
-        elif keys[pygame.K_d]:
-            self.rect.x += self.velocity
-            self.current_anim = self.anim_right
-            moving = True
-
-        # Gerak atas
-        elif keys[pygame.K_w]:
-            self.rect.y -= self.velocity
-            self.current_anim = self.anim_up
-            moving = True
-
-        # Gerak bawah
-        elif keys[pygame.K_s]:
-            self.rect.y += self.velocity
-            self.current_anim = self.anim_down
-            moving = True
+            
+            # Normalize vector
+            length = (dx**2 + dy**2)**0.5
+            dx = dx / length
+            dy = dy / length
+            
+            self.rect.x += dx * self.velocity
+            self.rect.y += dy * self.velocity
+            
+            # Update Animation based on direction
+            if dx < 0:
+                self.current_anim = self.anim_left
+            elif dx > 0:
+                self.current_anim = self.anim_right
+            elif dy < 0:
+                self.current_anim = self.anim_up
+            elif dy > 0:
+                self.current_anim = self.anim_down
 
         # --- ANIMATE ---
         if moving:
@@ -153,7 +184,18 @@ class Player(pygame.sprite.Sprite):
             self.inventory[item_name] = 1
         print(f"Collected {item_name}. Inventory: {self.inventory}")
 
-    def use_item(self, item_name, source="inventory", slot_index=None):
+    def use_item(self, item_name=None, source="inventory", slot_index=None):
+        # If no item specified, try to use selected toolbar item
+        if item_name is None:
+            slot_data = self.toolbar[self.selected_slot]
+            if slot_data:
+                item_name = slot_data['name']
+                source = "toolbar"
+                slot_index = self.selected_slot
+            else:
+                print("No item selected.")
+                return False
+
         # Check availability
         if source == "inventory":
             if item_name not in self.inventory or self.inventory[item_name] <= 0:
@@ -179,6 +221,22 @@ class Player(pygame.sprite.Sprite):
         elif item_name == "Mana Potion":
             # Placeholder for mana
             print("Used Mana Potion! (Mana not implemented yet)")
+            used = True
+        elif item_name == "Intelligence Potion":
+            self.effects["Intelligence"] = 1200 # 20 seconds
+            self.intelligence += 10
+            print(f"Used Intelligence Potion! Intelligence: {self.intelligence}")
+            used = True
+        elif item_name == "Rank Up Potion":
+            if self.rank < 9:
+                self.rank += 1
+                self.intelligence += 5 # Permanent boost
+                print(f"Used Rank Up Potion! Rank Up! New Rank: {self.rank}")
+                # Update brain shape flavor text
+                shapes = ["Smooth", "Wrinkled", "Folded", "Complex", "Glowing", "Radiant", "Cosmic", "Transcendent", "Omniscient"]
+                self.brain_shape = shapes[self.rank - 1]
+            else:
+                print("Already at Max Rank!")
             used = True
         
         if used:

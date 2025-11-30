@@ -1,212 +1,309 @@
-import pygame
-import time
 from src.states.game_state import GameState
-from src.config import *
+from src.entities.player import Player
 from src.entities.forest_creature import ForestCreature
 from src.entities.item import Item
+from src.entities.fairy import Fairy
+from src.config import *
+import pygame
+import random
+import time
+
+from src.entities.insect import Insect
 from src.utils.camera import Camera
 
 class ExplorationState(GameState):
     def __init__(self, game):
         super().__init__(game)
-        self.camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
-        self.all_sprites = pygame.sprite.Group()
-        self.enemies = pygame.sprite.Group()
+        self.entities = pygame.sprite.Group()
         self.items = pygame.sprite.Group()
+        self.fairies = pygame.sprite.Group()
+        self.insects = pygame.sprite.Group()
+        self.font = pygame.font.SysFont(None, 24)
         
-        # Infinite Map Logic
-        self.chunk_size = SCREEN_WIDTH
-        self.loaded_chunks = set()
+        # Infinite Map Settings (Virtual Size for Camera)
+        self.map_width = 2000 # Arbitrary large size for now
+        self.map_height = 2000
         
-        # Initial spawn
-        self.check_chunks()
-
-    def generate_chunk(self, chunk_x, chunk_y):
-        import random
+        # Zoom Settings
+        self.zoom = CAMERA_ZOOM
+        self.viewport_width = int(SCREEN_WIDTH / self.zoom)
+        self.viewport_height = int(SCREEN_HEIGHT / self.zoom)
         
-        # Spawn enemies
-        if random.random() < 0.5: # 50% chance of enemy per chunk
-            enemy = ForestCreature(
-                chunk_x * self.chunk_size + random.randint(0, self.chunk_size),
-                chunk_y * self.chunk_size + random.randint(0, self.chunk_size)
-            )
-            self.enemies.add(enemy)
-            self.all_sprites.add(enemy)
-            
-        # Spawn items
-        if random.random() < 0.7: # 70% chance of item
-            item_type = random.choice(["Red Herb", "Blue Herb", "Water"])
-            item = Item(
-                chunk_x * self.chunk_size + random.randint(0, self.chunk_size),
-                chunk_y * self.chunk_size + random.randint(0, self.chunk_size),
-                item_type
-            )
-            self.items.add(item)
-            self.all_sprites.add(item)
-
-    def check_chunks(self):
-        # Calculate current chunk based on player position
-        player_x, player_y = self.game.player.rect.center
-        chunk_x = int(player_x // self.chunk_size)
-        chunk_y = int(player_y // self.chunk_size)
+        self.camera = Camera(self.map_width, self.map_height, self.viewport_width, self.viewport_height)
         
-        # Load surrounding chunks (3x3 grid)
-        for dx in range(-1, 2):
-            for dy in range(-1, 2):
-                chunk_coord = (chunk_x + dx, chunk_y + dy)
-                if chunk_coord not in self.loaded_chunks:
-                    self.generate_chunk(chunk_coord[0], chunk_coord[1])
-                    self.loaded_chunks.add(chunk_coord)
+        self.chunk_size = 800
+        self.loaded_chunks = {}
+        
+        # Display Surface for Zooming
+        self.display_surface = pygame.Surface((self.viewport_width, self.viewport_height))
+        
+        # Grid Background
+        self.grid_surface = pygame.Surface((self.viewport_width, self.viewport_height)) # Optimization: Match viewport
+        self.grid_surface.fill(DARK_GREEN_BG)
+        self.draw_grid()
 
     def enter(self):
-        # Reset player position
-        self.game.player.rect.topleft = (0, 0)
-        # Set cooldown on ENTER
+        print("Entering Exploration State")
+        # Start Teleport Cooldown immediately upon entering Exploration
         self.game.player.teleport_cooldown_end = time.time() + TELEPORT_COOLDOWN
-        print(f"Entered Exploration Mode. Position reset. Cooldown until {self.game.player.teleport_cooldown_end}")
+
+    def draw_grid(self):
+        # Draw static grid lines on the surface
+        # We need to draw enough lines to cover the viewport
+        for x in range(0, self.viewport_width, TILE_SIZE):
+            pygame.draw.line(self.grid_surface, (30, 60, 30), (x, 0), (x, self.viewport_height))
+        for y in range(0, self.viewport_height, TILE_SIZE):
+            pygame.draw.line(self.grid_surface, (30, 60, 30), (0, y), (self.viewport_width, y))
 
     def handle_events(self, events):
         for event in events:
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_f:
+                    # Check for portal interaction (return home)
+                    # Simplified: If near (0,0)
+                    if self.game.player.rect.colliderect(pygame.Rect(-50, -50, 100, 100)):
+                        # Check cooldown
+                        current_time = time.time()
+                        if current_time >= self.game.player.teleport_cooldown_end:
+                            self.game.states["home"].enter()
+                            self.game.change_state("home")
+                            # Center player in Home
+                            self.game.player.rect.center = (800, 600) # 1600/2, 1200/2
+                        else:
+                            print(f"Teleport cooling down... {self.game.player.teleport_cooldown_end - current_time:.1f}s left")
+                
+                # Teleport Home (H)
                 if event.key == pygame.K_h:
+                    # Check cooldown
                     current_time = time.time()
                     if current_time >= self.game.player.teleport_cooldown_end:
+                        self.game.states["home"].enter()
                         self.game.change_state("home")
-                    else:
-                        remaining = int(self.game.player.teleport_cooldown_end - current_time)
-                        print(f"Teleport on cooldown: {remaining}s")
-                elif event.key == pygame.K_f:
-                    # Use item in selected slot
-                    selected_slot = self.game.player.selected_slot
-                    slot_data = self.game.player.toolbar[selected_slot]
-                    
-                    if slot_data:
-                        item_name = slot_data['name']
-                        # Use item from toolbar source
-                        self.game.player.use_item(item_name, source="toolbar", slot_index=selected_slot)
-                    else:
-                        print("No item in selected slot!")
+                        # Center player in Home
+                        home_state = self.game.states["home"]
+                        self.game.player.rect.center = (home_state.map_width // 2, home_state.map_height // 2)
                         
-                # Number keys 1-9 for toolbar selection
-                elif event.key >= pygame.K_1 and event.key <= pygame.K_9:
-                    slot = event.key - pygame.K_1
-                    self.game.player.selected_slot = slot
-                    print(f"Selected slot {slot + 1}")
+                if event.key == pygame.K_f:
+                     # If not near portal, try use item
+                    if not self.game.player.rect.colliderect(pygame.Rect(-50, -50, 100, 100)):
+                         self.game.player.use_item()
+                         
+                         # Check for Bug Net usage
+                         selected_slot = self.game.player.selected_slot
+                         selected_item = self.game.player.toolbar[selected_slot]
+                         if selected_item and selected_item['name'] == "Bug Net":
+                             # Check collision with insects
+                             # Create a "net" rect in front of player? Or just use player rect for simplicity
+                             # For now, use player rect + small range
+                             catch_rect = self.game.player.rect.inflate(20, 20)
+                             caught_insects = [insect for insect in self.insects if catch_rect.colliderect(insect.rect)]
+                             
+                             for insect in caught_insects:
+                                 self.insects.remove(insect)
+                                 # Add insect to inventory (Generic "Insect" item or specific?)
+                                 # For now, let's say "Beetle" or just "Insect"
+                                 # Config doesn't specify insect types yet, let's use "Beetle"
+                                 self.game.player.add_item("Beetle")
+                                 print("Caught a Beetle!")
 
     def update(self):
         self.game.player.update()
         self.camera.update(self.game.player)
-        self.check_chunks()
         
-        # Update only sprites near player (optimization) could be added here
-        self.enemies.update()
-        
-        # Collision detection
-        # Player vs Items
-        hits = pygame.sprite.spritecollide(self.game.player, self.items, True)
-        for hit in hits:
-            self.game.player.add_item(hit.name)
+        # Spawn Enemies
+        if random.random() < 0.005: # Reduced from 0.02
+            x = self.game.player.rect.x + random.randint(-400, 400)
+            y = self.game.player.rect.y + random.randint(-300, 300)
+            enemy = ForestCreature(x, y)
+            self.entities.add(enemy)
             
-        # Player vs Enemies
-        # Check for invisibility
-        if "Invisibility" not in self.game.player.effects:
-            if pygame.sprite.spritecollideany(self.game.player, self.enemies):
-                print("Ouch! Hit by a forest creature!")
-                # Push player back slightly
-                self.game.player.rect.x -= self.game.player.velocity * 5 # Stronger knockback
-                self.game.player.rect.y -= self.game.player.velocity * 5
+        # Spawn Items
+        if random.random() < 0.01:
+            x = self.game.player.rect.x + random.randint(-400, 400)
+            y = self.game.player.rect.y + random.randint(-300, 300)
+            item_type = random.choice(["Water", "Red Herb", "Blue Herb"])
+            # Rare Herb chance
+            if random.random() < 0.1:
+                item_type = "Rare Herb"
                 
-                # Reduce health
+            item = Item(x, y, item_type)
+            self.items.add(item)
+            
+        # Spawn Fairies
+        if random.random() < FAIRY_SPAWN_CHANCE:
+            x = self.game.player.rect.x + random.randint(-400, 400)
+            y = self.game.player.rect.y + random.randint(-300, 300)
+            fairy = Fairy(x, y)
+            self.fairies.add(fairy)
+
+        # Spawn Insects
+        if random.random() < INSECT_SPAWN_CHANCE:
+            x = self.game.player.rect.x + random.randint(-400, 400)
+            y = self.game.player.rect.y + random.randint(-300, 300)
+            insect = Insect(x, y)
+            self.insects.add(insect)
+            
+        # Update Entities
+        self.entities.update()
+        self.fairies.update()
+        self.insects.update()
+        
+        # Collisions
+        # Enemy
+        hits = pygame.sprite.spritecollide(self.game.player, self.entities, False)
+        if hits:
+            current_time = time.time()
+            if not hasattr(self.game.player, 'last_hit_time'):
+                self.game.player.last_hit_time = 0
+                
+            if current_time - self.game.player.last_hit_time > 1.0: # 1 second invulnerability
                 self.game.player.health -= 10
-                print(f"Health: {self.game.player.health}")
+                self.game.player.last_hit_time = current_time
+                print(f"Ouch! Hit by a forest creature! HP: {self.game.player.health}")
                 
-                if self.game.player.health <= 0:
-                    print("You died! Respawning at home...")
-                    self.game.player.health = self.game.player.max_health
-                    self.game.player.rect.topleft = (100, 100) # Reset position
-                    self.game.change_state("home")
+                # Knockback (Simple)
+                for enemy in hits:
+                    dx = self.game.player.rect.centerx - enemy.rect.centerx
+                    dy = self.game.player.rect.centery - enemy.rect.centery
+                    dist = (dx**2 + dy**2)**0.5
+                    if dist != 0:
+                        self.game.player.rect.x += (dx/dist) * 20
+                        self.game.player.rect.y += (dy/dist) * 20
+            
+            # Knockback or damage logic here
+            
+        # Item Collection
+        collected = pygame.sprite.spritecollide(self.game.player, self.items, True)
+        for item in collected:
+            self.game.player.add_item(item.name)
+            
+        # Fairy Collection
+        caught_fairies = pygame.sprite.spritecollide(self.game.player, self.fairies, True)
+        for fairy in caught_fairies:
+            self.game.player.fairies_caught += 1
+            print(f"Caught a Fairy! Total: {self.game.player.fairies_caught}")
 
     def draw(self, screen):
-        screen.fill(DARK_GREEN_BG) # Dark forest background
+        # Draw to display_surface first (Zoomed View)
         
-        # Draw World Grid
-        grid_size = 50
-        # Calculate offset based on camera position
-        start_x = self.camera.camera.x % grid_size
-        start_y = self.camera.camera.y % grid_size
+        # Draw Infinite Grid Background
+        # Calculate offset for grid scrolling
+        cam_x = self.camera.camera.x
+        cam_y = self.camera.camera.y
         
-        for x in range(start_x, SCREEN_WIDTH, grid_size):
-            pygame.draw.line(screen, (34, 139, 34), (x, 0), (x, SCREEN_HEIGHT))
-        for y in range(start_y, SCREEN_HEIGHT, grid_size):
-            pygame.draw.line(screen, (34, 139, 34), (0, y), (SCREEN_WIDTH, y))
+        # Modulo to repeat pattern
+        bg_x = cam_x % self.viewport_width
+        bg_y = cam_y % self.viewport_height
         
-        # Draw all sprites with camera offset
-        for sprite in self.all_sprites:
-            screen.blit(sprite.image, self.camera.apply(sprite))
+        # Draw 4 tiles to cover screen
+        self.display_surface.blit(self.grid_surface, (bg_x - self.viewport_width, bg_y - self.viewport_height))
+        self.display_surface.blit(self.grid_surface, (bg_x, bg_y - self.viewport_height))
+        self.display_surface.blit(self.grid_surface, (bg_x - self.viewport_width, bg_y))
+        self.display_surface.blit(self.grid_surface, (bg_x, bg_y))
+        
+        # Draw Portal (at 0,0)
+        portal_rect = pygame.Rect(-50, -50, 100, 100)
+        pygame.draw.rect(self.display_surface, (100, 0, 100), self.camera.apply_rect(portal_rect))
+        
+        # Draw Entities
+        for entity in self.entities:
+            self.display_surface.blit(entity.image, self.camera.apply(entity))
             
-        # Draw player with camera offset
-        screen.blit(self.game.player.image, self.camera.apply(self.game.player))
+        for item in self.items:
+            self.display_surface.blit(item.image, self.camera.apply(item))
+            
+        for fairy in self.fairies:
+            fairy.draw(self.display_surface, self.camera)
+            
+        # Draw Insects
+        # Draw Insects
+        for insect in self.insects:
+            self.display_surface.blit(insect.image, self.camera.apply(insect))
+
+        # Draw Player
+        if hasattr(self.game.player, 'image'):
+            self.display_surface.blit(self.game.player.image, self.camera.apply(self.game.player))
+        else:
+            pygame.draw.rect(self.display_surface, BLUE, self.camera.apply(self.game.player))
+            
+        # --- Darkness / Lantern Effect ---
+        # Create darkness surface if not exists (optimization)
+        if not hasattr(self, 'darkness_surface'):
+            self.darkness_surface = pygame.Surface((self.viewport_width, self.viewport_height), pygame.SRCALPHA)
+            
+        # Fill with semi-transparent black (Night time)
+        self.darkness_surface.fill((0, 0, 0, 200)) 
         
-        # Lantern Effect (Fog of War)
-        dark_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT)).convert_alpha()
-        dark_surface.fill((0, 0, 0, 230)) 
+        # Create Lantern Light (Gradient Circle)
+        # We subtract alpha from the darkness surface to create light
+        player_rect = self.camera.apply(self.game.player)
+        center = player_rect.center
         
-        player_screen_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        # Simple hole for now (can be improved with gradient texture later)
+        pygame.draw.circle(self.darkness_surface, (0, 0, 0, 0), center, 150) # Clear circle
         
-        pygame.draw.circle(dark_surface, (0, 0, 0, 0), player_screen_pos, self.game.player.lantern.get_radius())
+        # Draw darkness
+        self.display_surface.blit(self.darkness_surface, (0, 0))
         
-        screen.blit(dark_surface, (0, 0))
+        # --- Scale and Blit to Main Screen ---
+        pygame.transform.scale(self.display_surface, (SCREEN_WIDTH, SCREEN_HEIGHT), screen)
+            
+        # --- HUD (Draw directly on screen for sharpness) ---
         
-        # UI
-        font = pygame.font.SysFont(None, 24)
-        text = font.render(f"Pos: {self.game.player.rect.topleft}", True, WHITE)
-        screen.blit(text, (10, 10))
-        text2 = font.render("Exploration Mode (WASD to Move, 1-9 to Select, F to Use, H for Home)", True, WHITE)
-        screen.blit(text2, (10, 30))
+        # HP Bar
+        hp_bar_width = 200
+        hp_bar_height = 20
+        hp_x = 20
+        hp_y = 20
         
-        # Cooldown UI
-        current_time = time.time()
-        if current_time < self.game.player.teleport_cooldown_end:
-            remaining = int(self.game.player.teleport_cooldown_end - current_time)
-            cd_text = font.render(f"Teleport Cooldown: {remaining}s", True, RED)
-            screen.blit(cd_text, (SCREEN_WIDTH - 200, 10))
+        # Background
+        pygame.draw.rect(screen, RED, (hp_x, hp_y, hp_bar_width, hp_bar_height))
+        # Foreground
+        hp_percent = max(0, self.game.player.health / self.game.player.max_health)
+        pygame.draw.rect(screen, GREEN, (hp_x, hp_y, hp_bar_width * hp_percent, hp_bar_height))
+        # Border
+        pygame.draw.rect(screen, WHITE, (hp_x, hp_y, hp_bar_width, hp_bar_height), 2)
+        # Text
+        hp_text = self.font.render(f"HP: {self.game.player.health}/{self.game.player.max_health}", True, WHITE)
+        screen.blit(hp_text, (hp_x + 5, hp_y + 2))
+
+        # Toolbar
+        toolbar_start_x = (SCREEN_WIDTH - (9 * 40)) // 2
+        toolbar_y = SCREEN_HEIGHT - 50
         
-        # Health Bar
-        pygame.draw.rect(screen, RED, (10, 60, 200, 20))
-        pygame.draw.rect(screen, GREEN, (10, 60, 200 * (self.game.player.health / self.game.player.max_health), 20))
-        pygame.draw.rect(screen, WHITE, (10, 60, 200, 20), 2)
-        
-        # Inventory Toolbar
-        toolbar_y = SCREEN_HEIGHT - 60
-        start_x = SCREEN_WIDTH // 2 - (9 * 40) // 2
         for i in range(9):
-            rect = pygame.Rect(start_x + i * 45, toolbar_y, 40, 40)
+            x = toolbar_start_x + i * 40
+            rect = pygame.Rect(x, toolbar_y, 32, 32)
             
-            # Highlight selected slot
+            # Highlight selected
             if i == self.game.player.selected_slot:
-                pygame.draw.rect(screen, YELLOW, rect, 3)
-            else:
-                pygame.draw.rect(screen, GRAY, rect)
-                pygame.draw.rect(screen, WHITE, rect, 2)
+                pygame.draw.rect(screen, YELLOW, (x-2, toolbar_y-2, 36, 36), 2)
             
-            # Draw item in slot
+            pygame.draw.rect(screen, BLACK, rect)
+            pygame.draw.rect(screen, WHITE, rect, 1)
+            
             slot_data = self.game.player.toolbar[i]
             if slot_data:
-                item_name = slot_data['name']
+                # Draw Item Icon (Placeholder)
+                pygame.draw.rect(screen, PURPLE, (x+2, toolbar_y+2, 28, 28))
+                
+                # Draw Count
                 count = slot_data['count']
+                count_text = self.font.render(str(count), True, WHITE)
+                screen.blit(count_text, (x + 2, toolbar_y + 2))
                 
-                # Draw item placeholder (colored circle)
-                color = WHITE
-                if "Red" in item_name: color = RED
-                elif "Blue" in item_name: color = BLUE
-                elif "Water" in item_name: color = BLUE
-                elif "Potion" in item_name: color = YELLOW
-                pygame.draw.circle(screen, color, rect.center, 15)
+                # Draw Name (Small)
+                name = slot_data['name']
+                name_surf = pygame.font.SysFont(None, 12).render(name[:3], True, WHITE)
+                screen.blit(name_surf, (x+2, toolbar_y+20))
                 
-                # Draw count
-                count_text = font.render(str(count), True, BLACK)
-                screen.blit(count_text, (rect.right - 15, rect.bottom - 15))
-            
-            # Draw slot number
-            num_text = font.render(str(i + 1), True, BLACK)
-            screen.blit(num_text, (rect.x + 2, rect.y + 2))
+        # Cooldown Text / Teleport Message
+        current_time = time.time()
+        if current_time < self.game.player.teleport_cooldown_end:
+            remaining = self.game.player.teleport_cooldown_end - current_time
+            cd_text = self.font.render(f"Teleport Cooldown: {remaining:.1f}s", True, RED)
+            screen.blit(cd_text, (SCREEN_WIDTH // 2 - 100, 50))
+        else:
+            # Show "Press H to Return Home"
+            msg_text = self.font.render("Press H to Return Home", True, GREEN)
+            screen.blit(msg_text, (SCREEN_WIDTH // 2 - 100, 50))

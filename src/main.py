@@ -13,7 +13,7 @@ class Game:
         self.clock = pygame.time.Clock()
         
         self.player = Player(100, 100)
-        self.gold = 100 # Starting gold
+        # self.gold moved to player.gold
         
         self.states = {
             "home": HomeState(self),
@@ -44,5 +44,10 @@ class Game:
         sys.exit()
 
 if __name__ == "__main__":
-    game = Game()
-    game.run()
+    try:
+        game = Game()
+        game.run()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        input("Press Enter to exit...")
