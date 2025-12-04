@@ -10,6 +10,7 @@ from src.utils.ui import Button
 from src.utils.ui import Button
 from src.utils.camera import Camera
 from src.entities.golem import Golem
+from pytmx.util_pygame import load_pygame
 
 class HomeState(GameState):
     def __init__(self, game):
@@ -31,6 +32,10 @@ class HomeState(GameState):
         self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
         self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
         self.camera = Camera(self.map_width, self.map_height)
+        
+        self.tmx_data = load_pygame("/Users/sittiaminah/Documents/SEMESTER 3/OOP/To-Be-The-Greatest-Witch/assets/maps/home.tmx")
+        self.tile_w = self.tmx_data.tilewidth
+        self.tile_h = self.tmx_data.tileheight
         
         # Golems
         self.golems = pygame.sprite.Group()
@@ -762,17 +767,15 @@ class HomeState(GameState):
         return False
 
     def draw(self, screen):
-        screen.fill(DARK_GREEN) # Forest background (outside map)
-        
-        # Draw Home Area (Light Green)
-        # Draw Home Area (Light Green)
-        home_rect = pygame.Rect(0, 0, self.base_map_width, self.base_map_height)
-        pygame.draw.rect(screen, LIGHT_GREEN, self.camera.apply_rect(home_rect))
-        
-        # Draw Extra Safe Tiles
-        for tile_pos in self.extra_tiles:
-            tile_rect = pygame.Rect(tile_pos[0], tile_pos[1], TILE_SIZE, TILE_SIZE)
-            pygame.draw.rect(screen, LIGHT_GREEN, self.camera.apply_rect(tile_rect))
+        screen.fill(DARK_GREEN) # Background default jika area di luar map
+
+        # --- Render Layer Map TMX ---
+        for layer in self.tmx_data.visible_layers:
+            if hasattr(layer, "tiles"):  # Tile layer only
+                for x, y, tile in layer.tiles():
+                    world_x = x * self.tile_w
+                    world_y = y * self.tile_h
+                    screen.blit(tile, self.camera.apply_pos((world_x, world_y)))
             
         # Draw Axe Targeting Highlight
         selected_slot = self.game.player.selected_slot
@@ -814,7 +817,7 @@ class HomeState(GameState):
                 
             highlight_surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
             highlight_surf.fill(highlight_color)
-            screen.blit(highlight_surf, self.camera.apply_rect(pygame.Rect(tile_x, tile_y, TILE_SIZE, TILE_SIZE)))
+            screen.blit(tile, self.camera.apply_rect(pygame.Rect(world_x, world_y, TILE_SIZE, TILE_SIZE)))
         
         # Draw Farming Grid (Farmland and Crops)
         for key, tile in self.farming_system.grid.items():
