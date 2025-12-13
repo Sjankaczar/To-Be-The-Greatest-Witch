@@ -67,8 +67,7 @@ class ExplorationState(GameState):
                         if current_time >= self.game.player.teleport_cooldown_end:
                             self.game.states["home"].enter()
                             self.game.change_state("home")
-                            # Center player in Home
-                            self.game.player.rect.center = (800, 600) # 1600/2, 1200/2
+
                         else:
                             print(f"Teleport cooling down... {self.game.player.teleport_cooldown_end - current_time:.1f}s left")
                 
@@ -79,9 +78,7 @@ class ExplorationState(GameState):
                     if current_time >= self.game.player.teleport_cooldown_end:
                         self.game.states["home"].enter()
                         self.game.change_state("home")
-                        # Center player in Home
-                        home_state = self.game.states["home"]
-                        self.game.player.rect.center = (home_state.map_width // 2, home_state.map_height // 2)
+
                         
                 if event.key == pygame.K_f:
                      # If not near portal, try use item

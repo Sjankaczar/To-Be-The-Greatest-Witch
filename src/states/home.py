@@ -1,5 +1,6 @@
 import pygame
 import time
+import os
 from src.states.game_state import GameState
 from src.config import *
 from src.systems.crafting import CraftingSystem
@@ -31,9 +32,18 @@ class HomeState(GameState):
         self.map_height = self.base_map_height
         self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
         self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
-        self.camera = Camera(self.map_width, self.map_height)
         
-        self.tmx_data = load_pygame("/Users/sittiaminah/Documents/SEMESTER 3/OOP/To-Be-The-Greatest-Witch/assets/maps/home.tmx")
+        # Virtual Screen for Zoom
+        self.virtual_width = int(SCREEN_WIDTH / ZOOM_LEVEL)
+        self.virtual_height = int(SCREEN_HEIGHT / ZOOM_LEVEL)
+        self.virtual_screen = pygame.Surface((self.virtual_width, self.virtual_height))
+        
+        self.camera = Camera(self.map_width, self.map_height, self.virtual_width, self.virtual_height)
+        
+        import os
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        map_path = os.path.join(base_dir, "assets", "maps", "home.tmx")
+        self.tmx_data = load_pygame(map_path)
         self.tile_w = self.tmx_data.tilewidth
         self.tile_h = self.tmx_data.tileheight
         
@@ -43,13 +53,13 @@ class HomeState(GameState):
         self.command_mode = False
         
         # Initialize Player Position in Home
-        self.game.player.rect.topleft = (self.map_width // 2, self.map_height // 2)
+        self.game.player.rect.topleft = (90, 120)
         
         # Buildings (Positions relative to map)
-        self.portal_rect = pygame.Rect(self.map_width // 2 - 50, 100, 100, 60)
-        self.crafting_rect = pygame.Rect(300, self.map_height // 2 - 50, 80, 100)
-        self.shop_rect = pygame.Rect(self.map_width - 380, self.map_height // 2 - 50, 80, 100)
-        self.research_rect = pygame.Rect(self.map_width // 2 - 50, self.map_height - 200, 100, 80)
+        self.portal_rect = pygame.Rect(425, 137, 100, 60) # Center (475, 167)
+        self.crafting_rect = pygame.Rect(13, 293, 80, 100) # Center (53, 343)
+        self.shop_rect = pygame.Rect(435, -30, 80, 100) # Center (475, 20)
+        self.research_rect = pygame.Rect(150, 310, 100, 80) # Center (200, 350)
         
         self.show_recipes = False
         self.show_inventory = False
@@ -118,9 +128,22 @@ class HomeState(GameState):
         self.selected_shop_item = None
         self.btn_shop_action = Button(0, 0, 100, 40, "Buy", self.font, color=YELLOW, text_color=BLACK)
         self.shop_scroll_y = 0
+        
+        # Load Stats UI Background
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        stats_bg_path = os.path.join(base_dir, "UI The Greatest Witch", "RectangleBox_96x96-1.png.png")
+        if os.path.exists(stats_bg_path):
+            self.stats_bg_image = pygame.image.load(stats_bg_path).convert_alpha()
+            self.stats_bg_image = pygame.transform.scale(self.stats_bg_image, (150, 100)) # Scale to fit current size
+        else:
+            print(f"Warning: Stats background not found at {stats_bg_path}")
+            self.stats_bg_image = None
 
     def enter(self):
         print("Entering Home State")
+        if hasattr(self, 'last_player_pos') and self.last_player_pos is not None:
+             self.game.player.rect.topleft = self.last_player_pos
+             print(f"Restored player position to {self.last_player_pos}")
 
     def handle_events(self, events):
         for event in events:
@@ -137,8 +160,8 @@ class HomeState(GameState):
                 if event.key == pygame.K_f:
                     # Harvesting Logic
                     mouse_pos = pygame.mouse.get_pos()
-                    world_x = mouse_pos[0] - self.camera.camera.x
-                    world_y = mouse_pos[1] - self.camera.camera.y
+                    world_x = (mouse_pos[0] / ZOOM_LEVEL) - self.camera.camera.x
+                    world_y = (mouse_pos[1] / ZOOM_LEVEL) - self.camera.camera.y
                     
                     # Try to harvest at mouse position first (if mouse is over a tile)
                     if self.farming_system.harvest_crop(world_x, world_y, self.game.player.inventory):
@@ -376,6 +399,8 @@ class HomeState(GameState):
                 # Check collisions using game.player.rect
                 player_rect = self.game.player.rect
                 if player_rect.colliderect(self.portal_rect):
+                    self.last_player_pos = self.game.player.rect.topleft
+                    print(f"Saved player position {self.last_player_pos} before exploring")
                     self.game.states["exploration"].enter()
                     self.game.change_state("exploration")
                 elif player_rect.colliderect(self.crafting_rect):
@@ -498,8 +523,8 @@ class HomeState(GameState):
                 elif self.command_mode:
                     # Command Mode Logic (Queue Expansion)
                     mouse_x, mouse_y = event.pos
-                    world_x = mouse_x - self.camera.camera.x
-                    world_y = mouse_y - self.camera.camera.y
+                    world_x = (mouse_x / ZOOM_LEVEL) - self.camera.camera.x
+                    world_y = (mouse_y / ZOOM_LEVEL) - self.camera.camera.y
                     
                     tile_x = (world_x // TILE_SIZE)
                     tile_y = (world_y // TILE_SIZE)
@@ -521,8 +546,8 @@ class HomeState(GameState):
                 else:
                     # Convert mouse pos to world pos
                     mouse_x, mouse_y = event.pos
-                    world_x = mouse_x - self.camera.camera.x
-                    world_y = mouse_y - self.camera.camera.y
+                    world_x = (mouse_x / ZOOM_LEVEL) - self.camera.camera.x
+                    world_y = (mouse_y / ZOOM_LEVEL) - self.camera.camera.y
 
                     # Get selected tool
                     selected_slot_index = self.game.player.selected_slot
@@ -654,9 +679,10 @@ class HomeState(GameState):
         
         # Research UI
         if self.show_research:
-            # Window Position (World Space: Above Research Building)
-            world_rect = pygame.Rect(self.research_rect.centerx - 150, self.research_rect.top - 420, 300, 400)
-            screen_rect = self.camera.apply_rect(world_rect)
+            # Window Position (Screen Space: Centered)
+            window_width = 300
+            window_height = 400
+            screen_rect = pygame.Rect((SCREEN_WIDTH - window_width) // 2, (SCREEN_HEIGHT - window_height) // 2, window_width, window_height)
             self.research_ui_screen_rect = screen_rect # Store for drawing
             
             # Update Buttons
@@ -675,9 +701,10 @@ class HomeState(GameState):
 
         # Crafting UI
         if self.show_recipes:
-            # Window Position (World Space: Right of Crafting Building)
-            world_rect = pygame.Rect(self.crafting_rect.right + 20, self.crafting_rect.centery - 200, 300, 400)
-            screen_rect = self.camera.apply_rect(world_rect)
+            # Window Position (Screen Space: Centered)
+            window_width = 300
+            window_height = 400
+            screen_rect = pygame.Rect((SCREEN_WIDTH - window_width) // 2, (SCREEN_HEIGHT - window_height) // 2, window_width, window_height)
             self.crafting_ui_screen_rect = screen_rect
             
             # Update Buttons
@@ -702,9 +729,10 @@ class HomeState(GameState):
 
         # Shop UI
         if self.show_shop:
-            # Window Position (World Space: Above Shop Building)
-            world_rect = pygame.Rect(self.shop_rect.centerx - 150, self.shop_rect.top - 420, 300, 400)
-            screen_rect = self.camera.apply_rect(world_rect)
+            # Window Position (Screen Space: Centered)
+            window_width = 300
+            window_height = 400
+            screen_rect = pygame.Rect((SCREEN_WIDTH - window_width) // 2, (SCREEN_HEIGHT - window_height) // 2, window_width, window_height)
             self.shop_ui_screen_rect = screen_rect
             
             # Update Buttons
@@ -767,6 +795,8 @@ class HomeState(GameState):
         return False
 
     def draw(self, screen):
+        native_screen = screen
+        screen = self.virtual_screen
         screen.fill(DARK_GREEN) # Background default jika area di luar map
 
         # --- Render Layer Map TMX ---
@@ -782,8 +812,8 @@ class HomeState(GameState):
         selected_item = self.game.player.toolbar[selected_slot]
         if selected_item and selected_item['name'] == "Axe":
             mouse_pos = pygame.mouse.get_pos()
-            world_x = mouse_pos[0] - self.camera.camera.x
-            world_y = mouse_pos[1] - self.camera.camera.y
+            world_x = (mouse_pos[0] / ZOOM_LEVEL) - self.camera.camera.x
+            world_y = (mouse_pos[1] / ZOOM_LEVEL) - self.camera.camera.y
             
             tile_x = (world_x // TILE_SIZE) * TILE_SIZE
             tile_y = (world_y // TILE_SIZE) * TILE_SIZE
@@ -901,6 +931,12 @@ class HomeState(GameState):
             s.fill((255, 255, 0, 100)) # Yellow transparent
             screen.blit(s, self.camera.apply_rect(rect))
         
+        # --- DRAW WORLD TO SCREEN (SCALED) ---
+        scaled_surface = pygame.transform.scale(self.virtual_screen, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        native_screen.blit(scaled_surface, (0, 0))
+        
+        screen = native_screen # Switch back to native screen for UI
+        
         # --- UI LAYER (Screen Space) ---
         
         # Draw UI Title
@@ -910,11 +946,15 @@ class HomeState(GameState):
         # Draw Stats UI (Left of Toolbar)
         stats_x = 20
         stats_y = SCREEN_HEIGHT - 120
-        pygame.draw.rect(screen, (50, 50, 50), (stats_x, stats_y, 150, 100))
-        pygame.draw.rect(screen, WHITE, (stats_x, stats_y, 150, 100), 2)
         
-        rank_text = self.font.render(f"Rank: {self.game.player.rank}", True, WHITE)
-        gold_text = self.font.render(f"Gold: {self.game.player.gold}", True, YELLOW)
+        if self.stats_bg_image:
+            screen.blit(self.stats_bg_image, (stats_x, stats_y))
+        else:
+            pygame.draw.rect(screen, (50, 50, 50), (stats_x, stats_y, 150, 100))
+            pygame.draw.rect(screen, WHITE, (stats_x, stats_y, 150, 100), 2)
+        
+        rank_text = self.font.render(f"{self.game.player.rank}", True, WHITE)
+        gold_text = self.font.render(f"{self.game.player.gold}", True, YELLOW)
         
         # Intel Cap Logic
         current_intel = int(self.game.player.intelligence)
@@ -924,11 +964,11 @@ class HomeState(GameState):
         else:
             cap = RANK_INTEL_CAPS.get(rank, 25)
             
-        intel_text = self.font.render(f"Intel: {current_intel}/{cap}", True, (100, 100, 255))
+        intel_text = self.font.render(f"{current_intel}/{cap}", True, (100, 100, 255))
         
-        screen.blit(rank_text, (stats_x + 10, stats_y + 10))
-        screen.blit(gold_text, (stats_x + 10, stats_y + 40))
-        screen.blit(intel_text, (stats_x + 10, stats_y + 70))
+        screen.blit(rank_text, (stats_x + 90, stats_y + 19))
+        screen.blit(gold_text, (stats_x + 70, stats_y + 62))
+        screen.blit(intel_text, (stats_x + 70, stats_y + 38))
         
         # Draw Command Mode Indicator
         if self.command_mode:
@@ -1251,3 +1291,7 @@ class HomeState(GameState):
                     self.small_font = pygame.font.SysFont(None, 12)
                 name_surf = self.small_font.render(name[:3], True, WHITE)
                 screen.blit(name_surf, (x+2, toolbar_y+20))
+
+        # Draw Player Coordinates (Top-Left)
+        player_pos_text = self.font.render(f"Pos: ({self.game.player.rect.x}, {self.game.player.rect.y})", True, WHITE)
+        screen.blit(player_pos_text, (10, 10))

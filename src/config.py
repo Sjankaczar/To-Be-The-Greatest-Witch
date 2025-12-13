@@ -21,8 +21,9 @@ BROWN = (139, 69, 19) # Farmland color
 DARK_GREEN_BG = (20, 50, 20) # Very dark green for exploration
 
 # Game Settings
-FPS = 60
-TELEPORT_COOLDOWN = 10 # Seconds
+FPS = 30
+ZOOM_LEVEL = 2.0
+TELEPORT_COOLDOWN = 5 # Seconds
 
 # Shop Prices
 PRICES = {

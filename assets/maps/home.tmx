@@ -4,10 +4,10 @@
   <export target="map2..tmx" format="tmx"/>
  </editorsettings>
  <tileset firstgid="1" name="free_sample_tileset" tilewidth="16" tileheight="16" tilecount="2100" columns="70">
-  <image source="../Downloads/FREE SAMPLE Farm -  4 Seasons 16x16 Tileset by antarcticbees/free_sample_tileset.png" width="1120" height="480"/>
+  <image source="../tiles/free_sample_tileset.png" width="1120" height="480"/>
  </tileset>
  <tileset firstgid="2101" name="free_sample_crops" tilewidth="16" tileheight="16" tilecount="63" columns="7">
-  <image source="../Downloads/FREE SAMPLE Farm -  4 Seasons 16x16 Tileset by antarcticbees/free_sample_crops.png" width="112" height="144"/>
+  <image source="../tiles/free_sample_crops.png" width="112" height="144"/>
  </tileset>
  <layer id="3" name="Tile Layer 3" width="30" height="30">
   <data encoding="csv">

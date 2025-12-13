@@ -8,18 +8,8 @@ class Player(pygame.sprite.Sprite):
         import os
         
         # Dynamic path finding for assets
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        spritesheet_path = None
-        while True:
-            potential_path = os.path.join(current_dir, "assets", "spritesheets_walk.png")
-            if os.path.exists(potential_path):
-                spritesheet_path = potential_path
-                break
-            
-            parent_dir = os.path.dirname(current_dir)
-            if parent_dir == current_dir: # Reached root
-                raise FileNotFoundError("Could not find assets/spritesheets_walk.png")
-            current_dir = parent_dir
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        spritesheet_path = os.path.join(base_dir, "assets", "spritesheets_walk.png")
             
         self.spritesheet = pygame.image.load(spritesheet_path).convert_alpha()
 
@@ -73,7 +63,7 @@ class Player(pygame.sprite.Sprite):
         self.teleport_cooldown_end = 0.0 # Timestamp
         
         # Player Stats
-        self.rank = 1
+        self.rank = 4
         self.intelligence = 24
         self.brain_shape = "Smooth" # Flavor text
         self.fairies_caught = 0
@@ -164,7 +154,7 @@ class Player(pygame.sprite.Sprite):
         # --- ANIMATE ---
         if moving:
             self.frame_timer += 1
-            if self.frame_timer >= 10:   # atur kecepatan animasi
+            if self.frame_timer >= 5:   # atur kecepatan animasi
                 self.frame_timer = 0
                 self.current_frame = (self.current_frame + 1) % len(self.current_anim)
                 self.image = self.current_anim[self.current_frame]
