@@ -2,12 +2,13 @@ import pygame
 from src.config import *
 
 class Camera:
-    def __init__(self, width, height, viewport_width=SCREEN_WIDTH, viewport_height=SCREEN_HEIGHT):
+    def __init__(self, width, height, viewport_width=SCREEN_WIDTH, viewport_height=SCREEN_HEIGHT, min_offset_y=0):
         self.camera = pygame.Rect(0, 0, width, height)
         self.width = width
         self.height = height
         self.viewport_width = viewport_width
         self.viewport_height = viewport_height
+        self.min_offset_y = min_offset_y
 
     def apply(self, entity):
         return entity.rect.move(self.camera.topleft)
@@ -31,9 +32,19 @@ class Camera:
         # min limit (top-left) is 0
         # max limit (bottom-right) is -(map_width - viewport_width)
         x = min(0, x)  # left side
-        y = min(0, y)  # top side
-        x = max(-(self.width - self.viewport_width), x)  # right side
-        y = max(-(self.height - self.viewport_height), y)  # bottom side
+        y = min(self.min_offset_y, y)  # top side
+        
+        # Calculate limits
+        # If map is smaller than viewport, this would be positive
+        x_limit = -(self.width - self.viewport_width)
+        y_limit = -(self.height - self.viewport_height)
+        
+        # Ensure limits don't force positive coordinates (which would show negative world space)
+        x_limit = min(0, x_limit)
+        y_limit = min(0, y_limit)
+        
+        x = max(x_limit, x)  # right side
+        y = max(y_limit, y)  # bottom side
 
         self.camera = pygame.Rect(x, y, self.width, self.height)
 

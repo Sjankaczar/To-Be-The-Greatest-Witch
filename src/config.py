@@ -2,9 +2,14 @@ import pygame
 
 # Screen dimensions
 SCREEN_WIDTH = 800
+SCREEN_TITLE = "To Be The Greatest Witch"
+FPS = 30
 SCREEN_HEIGHT = 600
 TILE_SIZE = 32
-CAMERA_ZOOM = 1.15 
+CAMERA_ZOOM = 2.7 
+
+# Game Settings
+SHOW_OPENING_SCREEN = True
 
 # Colors
 WHITE = (255, 255, 255)
@@ -21,9 +26,11 @@ BROWN = (139, 69, 19) # Farmland color
 DARK_GREEN_BG = (20, 50, 20) # Very dark green for exploration
 
 # Game Settings
-FPS = 30
-ZOOM_LEVEL = 2.0
+# FPS = 30 # Removed redundant
+# ZOOM_LEVEL = 2.0 # Removed redundant
 TELEPORT_COOLDOWN = 5 # Seconds
+LANTERN_RADIUS = 75
+LANTERN_MAX_ALPHA = 200
 
 # Shop Prices
 PRICES = {

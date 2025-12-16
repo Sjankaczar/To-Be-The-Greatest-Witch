@@ -11,7 +11,15 @@ from src.utils.ui import Button
 from src.utils.ui import Button
 from src.utils.camera import Camera
 from src.entities.golem import Golem
+from src.utils.bitmap_font import BitmapFont
 from pytmx.util_pygame import load_pygame
+from src.utils.bitmap_font import BitmapFont
+from pytmx.util_pygame import load_pygame
+from src.assets import MAP_HOME, IMG_STATS_BG, IMG_HOTKEY_BOX, IMG_HIGHLIGHT_SLOT, IMG_TEMPLATE_BOX, IMG_QUIT_ICON, IMG_BUTTON, IMG_BUTTON_PRESSED, IMG_SLIDER, IMG_VALUE_BAR, IMG_VALUE_BLUE
+
+# Local Asset Path for Settings
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+IMG_SETTINGS_BTN = os.path.join(base_dir, "UI The Greatest Witch", "settings_button.png")
 
 class HomeState(GameState):
     def __init__(self, game):
@@ -26,26 +34,26 @@ class HomeState(GameState):
 
 
         # Home Area State
-        self.base_map_width = 1600
-        self.base_map_height = 1200
+        
+        # Load Map First to get dimensions
+        self.tmx_data = load_pygame(MAP_HOME)
+        self.tile_w = self.tmx_data.tilewidth
+        self.tile_h = self.tmx_data.tileheight
+        
+        self.base_map_width = self.tmx_data.width * self.tile_w
+        self.base_map_height = self.tmx_data.height * self.tile_h
         self.map_width = self.base_map_width
         self.map_height = self.base_map_height
-        self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
+        
         self.extra_tiles = [] # List of (x, y) tuples for expanded safe zone
         
         # Virtual Screen for Zoom
-        self.virtual_width = int(SCREEN_WIDTH / ZOOM_LEVEL)
-        self.virtual_height = int(SCREEN_HEIGHT / ZOOM_LEVEL)
+        self.virtual_width = int(SCREEN_WIDTH / CAMERA_ZOOM)
+        self.virtual_height = int(SCREEN_HEIGHT / CAMERA_ZOOM)
         self.virtual_screen = pygame.Surface((self.virtual_width, self.virtual_height))
         
-        self.camera = Camera(self.map_width, self.map_height, self.virtual_width, self.virtual_height)
-        
-        import os
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        map_path = os.path.join(base_dir, "assets", "maps", "home.tmx")
-        self.tmx_data = load_pygame(map_path)
-        self.tile_w = self.tmx_data.tilewidth
-        self.tile_h = self.tmx_data.tileheight
+        # Camera with top offset to hide empty row (16px)
+        self.camera = Camera(self.map_width, self.map_height, self.virtual_width, self.virtual_height, min_offset_y=-16)
         
         # Golems
         self.golems = pygame.sprite.Group()
@@ -58,7 +66,7 @@ class HomeState(GameState):
         # Buildings (Positions relative to map)
         self.portal_rect = pygame.Rect(425, 137, 100, 60) # Center (475, 167)
         self.crafting_rect = pygame.Rect(13, 293, 80, 100) # Center (53, 343)
-        self.shop_rect = pygame.Rect(435, -30, 80, 100) # Center (475, 20)
+        self.shop_rect = pygame.Rect(435, 20, 80, 100) # Center (475, 70)
         self.research_rect = pygame.Rect(150, 310, 100, 80) # Center (200, 350)
         
         self.show_recipes = False
@@ -66,15 +74,42 @@ class HomeState(GameState):
         self.show_research = False
         self.show_shop = False 
         
+        # Load Generic Button Images
+        self.button_image = None
+        self.button_pressed_image = None
+        if os.path.exists(IMG_BUTTON):
+            self.button_image = pygame.image.load(IMG_BUTTON).convert_alpha()
+        if os.path.exists(IMG_BUTTON_PRESSED):
+            self.button_pressed_image = pygame.image.load(IMG_BUTTON_PRESSED).convert_alpha()
+
+        # Load Research Highlight (3-Slice Scaling)
+        self.research_highlight_image = None
+        if os.path.exists(IMG_HIGHLIGHT_SLOT):
+             raw = pygame.image.load(IMG_HIGHLIGHT_SLOT).convert_alpha()
+             self.research_highlight_image = self.create_3_slice_highlight(raw, 200, 30)
+             self.crafting_highlight_image = self.create_3_slice_highlight(raw, 260, 30)
+
+
         # UI Buttons
-        self.btn_recipes = Button(50, 150, 200, 40, "Recipes (R)", self.font) 
-        self.btn_inventory = Button(50, 200, 200, 40, "Inventory (E)", self.font) 
-        self.btn_upgrade = Button(50, 250, 250, 40, "Upgrade Lantern (50G)", self.font)
-        self.btn_sell = Button(50, 300, 250, 40, "Sell Health Potion (10G)", self.font)
+        self.btn_recipes = Button(50, 150, 200, 40, "Recipes (R)", self.font, image=self.button_image, image_pressed=self.button_pressed_image) 
+        self.btn_inventory = Button(50, 200, 200, 40, "Inventory (E)", self.font, image=self.button_image, image_pressed=self.button_pressed_image) 
+        self.btn_upgrade = Button(50, 250, 250, 40, "Upgrade Lantern (50G)", self.font, image=self.button_image, image_pressed=self.button_pressed_image)
+        self.btn_sell = Button(50, 300, 250, 40, "Sell Health Potion (10G)", self.font, image=self.button_image, image_pressed=self.button_pressed_image)
         
         # Close Buttons
-        self.btn_close_crafting = Button(0, 0, 30, 30, "X", self.font, color=RED, text_color=WHITE)
-        self.btn_close_research = Button(0, 0, 30, 30, "X", self.font, color=RED, text_color=WHITE)
+        # Close Buttons
+        # Load Quit Icon
+        self.quit_icon_image = None
+        if os.path.exists(IMG_QUIT_ICON):
+            self.quit_icon_image = pygame.image.load(IMG_QUIT_ICON).convert_alpha()
+        else:
+            print(f"Warning: QuitIcon not found at {IMG_QUIT_ICON}")
+
+
+
+        self.btn_close_crafting = Button(0, 0, 30, 30, "", self.font, color=RED, text_color=WHITE, image=self.quit_icon_image)
+        self.btn_close_research = Button(0, 0, 30, 30, "", self.font, color=RED, text_color=WHITE, image=self.quit_icon_image)
+        self.btn_close_inventory = Button(0, 0, 30, 30, "", self.font, color=RED, text_color=WHITE, image=self.quit_icon_image)
         
         # Crafting UI State
         self.selected_recipe = None
@@ -86,14 +121,14 @@ class HomeState(GameState):
         self.dragging_source_index = -1
         
         self.crafting_tab = "Potions"
-        self.btn_tab_potions = Button(0, 0, 80, 30, "Potions", self.font, color=BLUE, text_color=WHITE)
-        self.btn_tab_seeds = Button(0, 0, 80, 30, "Seeds", self.font, color=BLUE, text_color=WHITE)
-        self.btn_tab_golems = Button(0, 0, 80, 30, "Golems", self.font, color=BLUE, text_color=WHITE)
+        self.btn_tab_potions = Button(0, 0, 80, 30, "Potions", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
+        self.btn_tab_seeds = Button(0, 0, 80, 30, "Seeds", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
+        self.btn_tab_golems = Button(0, 0, 80, 30, "Golems", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
         
         self.recipe_buttons = []
         self.update_recipe_list()
             
-        self.btn_craft = Button(450, 400, 100, 40, "Craft", self.font, color=DARK_GREEN, text_color=WHITE)
+        self.btn_craft = Button(450, 400, 100, 40, "Craft", self.font, color=DARK_GREEN, text_color=WHITE, image=self.button_image, image_pressed=self.button_pressed_image)
 
     def update_recipe_list(self):
         self.recipe_buttons = []
@@ -101,43 +136,138 @@ class HomeState(GameState):
         
         recipes = self.crafting_system.get_all_recipes(self.crafting_tab)
         for recipe in recipes:
-            self.recipe_buttons.append(Button(450, y, 200, 30, recipe, self.font))
+            self.recipe_buttons.append(Button(450, y, 260, 30, recipe, self.font, image=self.button_image))
             y += 35
         
         # Research UI State
         self.research_buttons = []
         y = 115
         for topic in self.research_system.topics:
-            self.research_buttons.append(Button(450, y, 200, 30, topic, self.font))
+            self.research_buttons.append(Button(450, y, 200, 30, topic, self.font, image=self.button_image)) # Use generic button, no pressed effect
             y += 35
         self.selected_research = None
-        self.btn_start_research = Button(450, 400, 150, 40, "Start Research", self.font, color=BLUE, text_color=WHITE)
+        self.btn_start_research = Button(450, 400, 150, 40, "Start Research", self.font, color=BLUE, text_color=WHITE, image=self.button_image, image_pressed=self.button_pressed_image)
 
         # Shop UI State
         self.shop_tab = "buy" # "buy" or "sell"
-        self.btn_shop_buy_tab = Button(0, 0, 100, 30, "Buy", self.font)
-        self.btn_shop_sell_tab = Button(0, 0, 100, 30, "Sell", self.font)
-        self.btn_close_shop = Button(0, 0, 30, 30, "X", self.font, color=RED, text_color=WHITE)
+        self.btn_shop_buy_tab = Button(0, 0, 100, 30, "Buy", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
+        self.btn_shop_sell_tab = Button(0, 0, 100, 30, "Sell", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
+        self.btn_close_shop = Button(0, 0, 30, 30, "", self.font, color=RED, text_color=WHITE, image=self.quit_icon_image)
         
         self.shop_items_buy = self.shop_system.get_all_items()
         self.shop_buy_buttons = []
         for item in self.shop_items_buy:
-            self.shop_buy_buttons.append(Button(0, 0, 200, 30, f"{item} ({PRICES.get(item, 0)}G)", self.font))
+            self.shop_buy_buttons.append(Button(0, 0, 200, 30, f"{item} ({PRICES.get(item, 0)}G)", self.font, image=self.button_image))
             
         self.shop_sell_buttons = [] # Dynamic based on inventory
         self.selected_shop_item = None
-        self.btn_shop_action = Button(0, 0, 100, 40, "Buy", self.font, color=YELLOW, text_color=BLACK)
+        self.btn_shop_action = Button(0, 0, 100, 40, "Buy", self.font, color=YELLOW, text_color=BLACK, image=self.button_image, image_pressed=self.button_pressed_image)
         self.shop_scroll_y = 0
         
-        # Load Stats UI Background
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        stats_bg_path = os.path.join(base_dir, "UI The Greatest Witch", "RectangleBox_96x96-1.png.png")
-        if os.path.exists(stats_bg_path):
-            self.stats_bg_image = pygame.image.load(stats_bg_path).convert_alpha()
-            self.stats_bg_image = pygame.transform.scale(self.stats_bg_image, (150, 100)) # Scale to fit current size
+        # Settings UI
+        self.show_settings = False
+        # Settings UI
+        self.show_settings = False
+        self.settings_btn_image = None
+        if os.path.exists(IMG_SETTINGS_BTN):
+             self.settings_btn_image = pygame.image.load(IMG_SETTINGS_BTN).convert_alpha()
+             # Scale if needed
+             self.settings_btn_image = pygame.transform.scale(self.settings_btn_image, (32, 32))
         else:
-            print(f"Warning: Stats background not found at {stats_bg_path}")
+             print(f"Warning: Settings Btn not found at {IMG_SETTINGS_BTN}")
+             
+        self.btn_settings = Button(0, 0, 32, 32, "", self.font, color=GRAY, image=self.settings_btn_image)
+        
+        # Volume Slider
+        self.slider_image = None
+        if os.path.exists(IMG_SLIDER):
+             self.slider_image = pygame.image.load(IMG_SLIDER).convert_alpha()
+        else:
+             print(f"Warning: Slider not found at {IMG_SLIDER}")
+
+        # Volume Bar Images
+        self.value_bar_image = None
+        if os.path.exists(IMG_VALUE_BAR):
+             self.value_bar_image = pygame.image.load(IMG_VALUE_BAR).convert_alpha()
+        else:
+             print(f"Warning: ValueBar not found at {IMG_VALUE_BAR}")
+             
+        self.value_blue_image = None
+        if os.path.exists(IMG_VALUE_BLUE):
+             self.value_blue_image = pygame.image.load(IMG_VALUE_BLUE).convert_alpha()
+        else:
+             print(f"Warning: ValueBlue not found at {IMG_VALUE_BLUE}")
+             
+        self.dragging_volume = False
+        self.small_ui_font = pygame.font.SysFont(None, 18)
+        
+        # Load Stats UI Background
+        
+        # Load Stats UI Background
+        if os.path.exists(IMG_STATS_BG):
+            self.stats_bg_image = pygame.image.load(IMG_STATS_BG).convert_alpha()
+            self.stats_bg_image = pygame.transform.scale(self.stats_bg_image, (135, 135)) # Uniform scale 1.5x (90->135) to avoid distortion
+        else:
+            print(f"Warning: Stats background not found at {IMG_STATS_BG}")
             self.stats_bg_image = None
+            
+        # Load Toolbar Box Image
+        if os.path.exists(IMG_HOTKEY_BOX):
+             self.toolbar_box_image = pygame.image.load(IMG_HOTKEY_BOX).convert_alpha()
+        else:
+             print(f"Warning: HotkeyBox not found at {IMG_HOTKEY_BOX}")
+             self.toolbar_box_image = None
+
+        # Load Highlight Image
+        if os.path.exists(IMG_HIGHLIGHT_SLOT):
+             self.highlight_image = pygame.image.load(IMG_HIGHLIGHT_SLOT).convert_alpha()
+             self.highlight_image = pygame.transform.scale(self.highlight_image, (40, 40)) # Larger than box to surround it
+        else:
+             print(f"Warning: HighlightSlot not found at {IMG_HIGHLIGHT_SLOT}")
+             self.highlight_image = None
+             
+        # Load Template Box (UI Background)
+        if os.path.exists(IMG_TEMPLATE_BOX):
+            self.template_box_image = pygame.image.load(IMG_TEMPLATE_BOX).convert_alpha()
+        else:
+            print(f"Warning: Template box not found at {IMG_TEMPLATE_BOX}")
+            self.template_box_image = None
+            
+        # UI Box Constants (Verified via script)
+        self.box_orig_w = 90
+        self.box_orig_h = 90
+        self.box_pad_left = 14
+        self.box_pad_top = 6
+        self.box_inner_w = 62 # 90 - 14 - 14
+        self.box_inner_h = 78 # 90 - 6 - 6 (Assuming symmetry for visual balance)
+
+        # Load Bitmap Font
+        # Load Bitmap Font
+        # New BitmapFont implementation handles loading both font files internally
+        self.bitmap_font = BitmapFont(32, 32)
+
+    def create_3_slice_highlight(self, raw_img, target_w, target_h):
+        # 1. Scale uniformly to target height to establish correct border thickness
+        base_surf = pygame.transform.scale(raw_img, (target_h, target_h))
+        
+        # 2. Slice
+        border_w = 10
+        left_part = base_surf.subsurface((0, 0, border_w, target_h))
+        right_part = base_surf.subsurface((target_h - border_w, 0, border_w, target_h))
+        mid_part = base_surf.subsurface((border_w, 0, target_h - 2 * border_w, target_h))
+        
+        # 3. Stretch Middle
+        mid_width = target_w - 2 * border_w
+        if mid_width < 0: mid_width = 0
+        mid_stretched = pygame.transform.scale(mid_part, (mid_width, target_h))
+        
+        # 4. Assemble
+        final_surf = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+        final_surf.blit(left_part, (0, 0))
+        final_surf.blit(mid_stretched, (border_w, 0))
+        final_surf.blit(right_part, (target_w - border_w, 0))
+        
+        return final_surf
 
     def enter(self):
         print("Entering Home State")
@@ -160,8 +290,8 @@ class HomeState(GameState):
                 if event.key == pygame.K_f:
                     # Harvesting Logic
                     mouse_pos = pygame.mouse.get_pos()
-                    world_x = (mouse_pos[0] / ZOOM_LEVEL) - self.camera.camera.x
-                    world_y = (mouse_pos[1] / ZOOM_LEVEL) - self.camera.camera.y
+                    world_x = (mouse_pos[0] / CAMERA_ZOOM) - self.camera.camera.x
+                    world_y = (mouse_pos[1] / CAMERA_ZOOM) - self.camera.camera.y
                     
                     # Try to harvest at mouse position first (if mouse is over a tile)
                     if self.farming_system.harvest_crop(world_x, world_y, self.game.player.inventory):
@@ -270,8 +400,12 @@ class HomeState(GameState):
             if self.btn_inventory.handle_event(event):
                 self.show_inventory = not self.show_inventory
                 self.show_recipes = False
-
+                
             if self.show_inventory:
+                # Close Inventory Button
+                if self.btn_close_inventory.handle_event(event):
+                    self.show_inventory = False
+                    
                 # Center the window (Must match draw logic)
                 window_width = 300
                 window_height = 350
@@ -417,6 +551,42 @@ class HomeState(GameState):
                     else:
                         print("Research Center unlocks at Rank 4!")
                     
+            # Settings Button Handle (Global)
+            if self.btn_settings.handle_event(event):
+                self.show_settings = not self.show_settings
+                print(f"Settings toggled: {self.show_settings}")
+            
+            # Close Settings if open and click outside
+            if self.show_settings:
+                 # Calculate popup rect (Same as draw)
+                 popup_w = 300
+                 popup_h = 200
+                 popup_rect = pygame.Rect((SCREEN_WIDTH - popup_w)//2, (SCREEN_HEIGHT - popup_h)//2, popup_w, popup_h)
+                 
+                 # Volume Slider Rect
+                 # Match draw: x+100, y+70, 128x16 (Moved left from 120)
+                 bar_rect = pygame.Rect(popup_rect.x + 100, popup_rect.y + 70, 128, 16)
+                 
+                 if event.type == pygame.MOUSEBUTTONDOWN:
+                      if bar_rect.inflate(20, 20).collidepoint(event.pos):
+                           self.dragging_volume = True
+                           # Update volume
+                           val = (event.pos[0] - bar_rect.x) / bar_rect.width
+                           self.game.volume = max(0.0, min(1.0, val))
+                           pygame.mixer.music.set_volume(self.game.volume)
+                      elif not popup_rect.collidepoint(event.pos) and not self.btn_settings.rect.collidepoint(event.pos):
+                           # Close if clicked outside
+                           pass # Optional: self.show_settings = False
+                           
+                 elif event.type == pygame.MOUSEBUTTONUP:
+                      self.dragging_volume = False
+                      
+                 elif event.type == pygame.MOUSEMOTION:
+                      if self.dragging_volume:
+                           val = (event.pos[0] - bar_rect.x) / bar_rect.width
+                           self.game.volume = max(0.0, min(1.0, val))
+                           pygame.mixer.music.set_volume(self.game.volume)
+
             # Shop UI Events
             if self.show_shop:
                 if self.btn_close_shop.handle_event(event):
@@ -431,7 +601,7 @@ class HomeState(GameState):
                     self.shop_items_buy = self.shop_system.get_all_items()
                     self.shop_buy_buttons = []
                     for item in self.shop_items_buy:
-                        self.shop_buy_buttons.append(Button(0, 0, 200, 30, f"{item} ({PRICES.get(item, 0)}G)", self.font))
+                        self.shop_buy_buttons.append(Button(0, 0, 200, 30, f"{item} ({PRICES.get(item, 0)}G)", self.font, image=self.button_image))
                     
                 if self.btn_shop_sell_tab.handle_event(event):
                     self.shop_tab = "sell"
@@ -443,7 +613,7 @@ class HomeState(GameState):
                     y_offset = 0
                     for item, count in self.game.player.inventory.items():
                         price = PRICES.get(item, 0) // 2
-                        self.shop_sell_buttons.append(Button(0, 0, 200, 30, f"{item} x{count} ({price}G)", self.font))
+                        self.shop_sell_buttons.append(Button(0, 0, 200, 30, f"{item} x{count} ({price}G)", self.font, image=self.button_image))
                 
                 # Scroll Handling
                 if event.type == pygame.MOUSEWHEEL:
@@ -488,6 +658,8 @@ class HomeState(GameState):
                                     self.selected_shop_item = current_inv_items[index]
                             
                 # Handle Action (Buy/Sell)
+            
+
                 if self.selected_shop_item and self.btn_shop_action.handle_event(event):
                     if self.shop_tab == "buy":
                         # Check Rank
@@ -523,8 +695,8 @@ class HomeState(GameState):
                 elif self.command_mode:
                     # Command Mode Logic (Queue Expansion)
                     mouse_x, mouse_y = event.pos
-                    world_x = (mouse_x / ZOOM_LEVEL) - self.camera.camera.x
-                    world_y = (mouse_y / ZOOM_LEVEL) - self.camera.camera.y
+                    world_x = (mouse_x / CAMERA_ZOOM) - self.camera.camera.x
+                    world_y = (mouse_y / CAMERA_ZOOM) - self.camera.camera.y
                     
                     tile_x = (world_x // TILE_SIZE)
                     tile_y = (world_y // TILE_SIZE)
@@ -546,8 +718,8 @@ class HomeState(GameState):
                 else:
                     # Convert mouse pos to world pos
                     mouse_x, mouse_y = event.pos
-                    world_x = (mouse_x / ZOOM_LEVEL) - self.camera.camera.x
-                    world_y = (mouse_y / ZOOM_LEVEL) - self.camera.camera.y
+                    world_x = (mouse_x / CAMERA_ZOOM) - self.camera.camera.x
+                    world_y = (mouse_y / CAMERA_ZOOM) - self.camera.camera.y
 
                     # Get selected tool
                     selected_slot_index = self.game.player.selected_slot
@@ -667,6 +839,21 @@ class HomeState(GameState):
         if not in_base and not in_extra:
             # Invalid move, revert
             self.game.player.rect = prev_rect
+            
+        # Invisible Barrier Check
+        # Area: (60, 102) to (132, 119) -> Rect(60, 102, 72, 17)
+        barrier_rect = pygame.Rect(60, 102, 72, 17)
+        if self.game.player.rect.colliderect(barrier_rect):
+             # Collision with barrier, revert
+             self.game.player.rect = prev_rect
+             
+        # Clamp Player Y to 0 (Prevent negative Y / Void walking)
+        # Force clamp rect AND position properties if any
+        if self.game.player.rect.top < 16:
+            self.game.player.rect.top = 16
+            # Also reset velocity if player has it physics-wise to prevent sticking
+            if hasattr(self.game.player, 'velocity_y') and self.game.player.velocity_y < 0:
+                self.game.player.velocity_y = 0
         
         # Update Camera
         self.camera.update(self.game.player)
@@ -757,6 +944,16 @@ class HomeState(GameState):
             
             # Close Button
             self.btn_close_shop.rect.topright = (screen_rect.right - 10, screen_rect.top + 10)
+            
+        # Inventory UI Position Update
+        if self.show_inventory:
+             window_width = 300
+             window_height = 350
+             window_x = (SCREEN_WIDTH - window_width) // 2
+             window_y = (SCREEN_HEIGHT - window_height) // 2
+             window_rect = pygame.Rect(window_x, window_y, window_width, window_height)
+             
+             self.btn_close_inventory.rect.topright = (window_rect.right - 10, window_rect.top + 10)
 
     def is_mouse_on_ui(self, pos):
         # Check all active UI rects
@@ -793,27 +990,158 @@ class HomeState(GameState):
             return True
             
         return False
+        return False
+
+    def draw_ui_background(self, screen, rect):
+        """Draws the template box stretched so its VISIBLE content matches rect."""
+        if self.template_box_image:
+            # Calculate Scale Factors
+            scale_x = rect.width / self.box_inner_w
+            scale_y = rect.height / self.box_inner_h
+            
+            # Calculate New Total Size
+            new_w = int(self.box_orig_w * scale_x)
+            new_h = int(self.box_orig_h * scale_y)
+            
+            # Scale Image
+            scaled_img = pygame.transform.scale(self.template_box_image, (new_w, new_h))
+            
+            # Calculate Offset Position
+            # We want the inner top-left to be at rect.x, rect.y
+            # The inner top-left is at (pad_left * scale_x, pad_top * scale_y) relative to image
+            pos_x = rect.x - int(self.box_pad_left * scale_x)
+            pos_y = rect.y - int(self.box_pad_top * scale_y)
+            
+            screen.blit(scaled_img, (pos_x, pos_y))
+        else:
+            pygame.draw.rect(screen, GRAY, rect)
+            pygame.draw.rect(screen, WHITE, rect, 2)
 
     def draw(self, screen):
         native_screen = screen
         screen = self.virtual_screen
-        screen.fill(DARK_GREEN) # Background default jika area di luar map
+        screen.fill(BLACK) # Background default (Void color)
 
-        # --- Render Layer Map TMX ---
+        # --- Render Layer Map TMX with Z-Ordering ---
+        
+        # Explicitly draw Black Void for y < 0 to cover any gaps if camera moves down
+        void_rect = pygame.Rect(-10000, -10000, 20000, 10000) # Covers everything above y=0
+        pygame.draw.rect(screen, BLACK, self.camera.apply_rect(void_rect))
+        
+        entities_drawn = False
+        
         for layer in self.tmx_data.visible_layers:
-            if hasattr(layer, "tiles"):  # Tile layer only
+            # Draw Tile Layer
+            if hasattr(layer, "tiles"):
                 for x, y, tile in layer.tiles():
                     world_x = x * self.tile_w
                     world_y = y * self.tile_h
                     screen.blit(tile, self.camera.apply_pos((world_x, world_y)))
+            
+            # Check for injection point (After Layer 5, Before Layer 6)
+            # Use getattr because some layer types might not have id
+            if getattr(layer, "id", -1) == 5:
+                 # --- DRAW ENTITIES PLANE ---
+                 
+                 # Draw Crops (On top of ground/Layer 5)
+                 for key, tile in self.farming_system.grid.items():
+                    grid_x, grid_y = key
+                    world_x = grid_x * self.farming_system.tile_size
+                    world_y = grid_y * self.farming_system.tile_size
+                    rect = pygame.Rect(world_x, world_y, self.farming_system.tile_size, self.farming_system.tile_size)
+                    
+                    if tile['type'] == 'farmland':
+                        color = BROWN
+                        if tile['watered']:
+                            color = (100, 50, 0) # Darker brown if watered
+                        pygame.draw.rect(screen, color, self.camera.apply_rect(rect))
+                        pygame.draw.rect(screen, BLACK, self.camera.apply_rect(rect), 1) # Grid lines
+                        
+                        if tile['crop']:
+                            # Draw Crop
+                            if tile['growth'] == 0:
+                                # Draw Seeds (Dots)
+                                seed_color = (200, 200, 100) # Default seed color
+                                if "Red" in tile['crop']: seed_color = (200, 50, 50)
+                                elif "Blue" in tile['crop']: seed_color = (50, 50, 200)
+                                elif "Rare" in tile['crop']: seed_color = (200, 50, 200)
+                                
+                                # Draw 3 dots
+                                center = rect.center
+                                pygame.draw.circle(screen, seed_color, (center[0] + self.camera.camera.x - 5, center[1] + self.camera.camera.y + 5), 3)
+                                pygame.draw.circle(screen, seed_color, (center[0] + self.camera.camera.x + 5, center[1] + self.camera.camera.y + 5), 3)
+                                pygame.draw.circle(screen, seed_color, (center[0] + self.camera.camera.x, center[1] + self.camera.camera.y - 5), 3)
+                            else:
+                                # Growth stage color?
+                                growth_stage = tile['growth'] / CROP_GROWTH_TIME
+                                crop_color = GREEN
+                                if growth_stage < 0.3:
+                                    crop_color = (100, 255, 100) # Sprout
+                                elif growth_stage < 0.7:
+                                    crop_color = (50, 200, 50) # Growing
+                                else:
+                                    crop_color = (0, 150, 0) # Mature
+                                    
+                                # Draw circle for crop
+                                center = rect.center
+                                radius = 5 + (10 * growth_stage)
+                                pygame.draw.circle(screen, crop_color, (center[0] + self.camera.camera.x, center[1] + self.camera.camera.y), int(radius))
+                
+                 # Draw Buildings (World Space)
+                 # Portal
+                 pygame.draw.rect(screen, (100, 0, 100), self.camera.apply_rect(self.portal_rect))
+                 portal_text = self.font.render("Portal", True, WHITE)
+                 screen.blit(portal_text, (self.portal_rect.centerx - 20 + self.camera.camera.x, self.portal_rect.centery - 10 + self.camera.camera.y))
+                 
+                 # Crafting
+                 pygame.draw.rect(screen, (139, 69, 19), self.camera.apply_rect(self.crafting_rect)) # Brown
+                 craft_text = self.font.render("Crafting", True, WHITE)
+                 screen.blit(craft_text, (self.crafting_rect.centerx - 30 + self.camera.camera.x, self.crafting_rect.centery - 10 + self.camera.camera.y))
+                 
+                 # Shop
+                 pygame.draw.rect(screen, (218, 165, 32), self.camera.apply_rect(self.shop_rect)) # Goldenrod
+                 shop_text = self.font.render("Shop", True, WHITE)
+                 screen.blit(shop_text, (self.shop_rect.centerx - 20 + self.camera.camera.x, self.shop_rect.centery - 10 + self.camera.camera.y))
+                 
+                 # Research
+                 pygame.draw.rect(screen, (70, 130, 180), self.camera.apply_rect(self.research_rect)) # Steel Blue
+                 res_text = self.font.render("Research", True, WHITE)
+                 screen.blit(res_text, (self.research_rect.centerx - 30 + self.camera.camera.x, self.research_rect.centery - 10 + self.camera.camera.y))
+                 
+                 # Draw Player (World Space)
+                 if hasattr(self.game.player, 'image'):
+                     screen.blit(self.game.player.image, self.camera.apply_rect(self.game.player.rect))
+                 else:
+                     pygame.draw.rect(screen, BLUE, self.camera.apply_rect(self.game.player.rect))
+                     
+                 # Draw Golems
+                 for golem in self.golems:
+                     screen.blit(golem.image, self.camera.apply_rect(golem.rect))
+                     
+                 # Draw Expansion Queue (Ghost Tiles)
+                 for tile_pos in self.expansion_queue:
+                     rect = pygame.Rect(tile_pos[0] * TILE_SIZE, tile_pos[1] * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                     s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+                     s.fill((255, 255, 0, 100)) # Yellow transparent
+                     screen.blit(s, self.camera.apply_rect(rect))
+                 
+                 entities_drawn = True
+        
+        # Fallback: If entities weren't drawn (e.g. Layer 5 missing), draw them now
+        if not entities_drawn:
+             # Draw Player (World Space) - condensed fallback
+             if hasattr(self.game.player, 'image'):
+                 screen.blit(self.game.player.image, self.camera.apply_rect(self.game.player.rect))
+             else:
+                 pygame.draw.rect(screen, BLUE, self.camera.apply_rect(self.game.player.rect))
             
         # Draw Axe Targeting Highlight
         selected_slot = self.game.player.selected_slot
         selected_item = self.game.player.toolbar[selected_slot]
         if selected_item and selected_item['name'] == "Axe":
             mouse_pos = pygame.mouse.get_pos()
-            world_x = (mouse_pos[0] / ZOOM_LEVEL) - self.camera.camera.x
-            world_y = (mouse_pos[1] / ZOOM_LEVEL) - self.camera.camera.y
+            world_x = (mouse_pos[0] / CAMERA_ZOOM) - self.camera.camera.x
+            world_y = (mouse_pos[1] / CAMERA_ZOOM) - self.camera.camera.y
             
             tile_x = (world_x // TILE_SIZE) * TILE_SIZE
             tile_y = (world_y // TILE_SIZE) * TILE_SIZE
@@ -847,89 +1175,7 @@ class HomeState(GameState):
                 
             highlight_surf = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
             highlight_surf.fill(highlight_color)
-            screen.blit(tile, self.camera.apply_rect(pygame.Rect(world_x, world_y, TILE_SIZE, TILE_SIZE)))
-        
-        # Draw Farming Grid (Farmland and Crops)
-        for key, tile in self.farming_system.grid.items():
-            grid_x, grid_y = key
-            world_x = grid_x * self.farming_system.tile_size
-            world_y = grid_y * self.farming_system.tile_size
-            rect = pygame.Rect(world_x, world_y, self.farming_system.tile_size, self.farming_system.tile_size)
-            
-            if tile['type'] == 'farmland':
-                color = BROWN
-                if tile['watered']:
-                    color = (100, 50, 0) # Darker brown if watered
-                pygame.draw.rect(screen, color, self.camera.apply_rect(rect))
-                pygame.draw.rect(screen, BLACK, self.camera.apply_rect(rect), 1) # Grid lines
-                
-                if tile['crop']:
-                    # Draw Crop
-                    if tile['growth'] == 0:
-                        # Draw Seeds (Dots)
-                        seed_color = (200, 200, 100) # Default seed color
-                        if "Red" in tile['crop']: seed_color = (200, 50, 50)
-                        elif "Blue" in tile['crop']: seed_color = (50, 50, 200)
-                        elif "Rare" in tile['crop']: seed_color = (200, 50, 200)
-                        
-                        # Draw 3 dots
-                        center = rect.center
-                        pygame.draw.circle(screen, seed_color, (center[0] + self.camera.camera.x - 5, center[1] + self.camera.camera.y + 5), 3)
-                        pygame.draw.circle(screen, seed_color, (center[0] + self.camera.camera.x + 5, center[1] + self.camera.camera.y + 5), 3)
-                        pygame.draw.circle(screen, seed_color, (center[0] + self.camera.camera.x, center[1] + self.camera.camera.y - 5), 3)
-                    else:
-                        # Growth stage color?
-                        growth_stage = tile['growth'] / CROP_GROWTH_TIME
-                        crop_color = GREEN
-                        if growth_stage < 0.3:
-                            crop_color = (100, 255, 100) # Sprout
-                        elif growth_stage < 0.7:
-                            crop_color = (50, 200, 50) # Growing
-                        else:
-                            crop_color = (0, 150, 0) # Mature
-                            
-                        # Draw circle for crop
-                        center = rect.center
-                        radius = 5 + (10 * growth_stage)
-                        pygame.draw.circle(screen, crop_color, (center[0] + self.camera.camera.x, center[1] + self.camera.camera.y), int(radius))
-        
-        # Draw Buildings (World Space)
-        # Portal
-        pygame.draw.rect(screen, (100, 0, 100), self.camera.apply_rect(self.portal_rect))
-        portal_text = self.font.render("Portal", True, WHITE)
-        screen.blit(portal_text, (self.portal_rect.centerx - 20 + self.camera.camera.x, self.portal_rect.centery - 10 + self.camera.camera.y))
-        
-        # Crafting
-        pygame.draw.rect(screen, (139, 69, 19), self.camera.apply_rect(self.crafting_rect)) # Brown
-        craft_text = self.font.render("Crafting", True, WHITE)
-        screen.blit(craft_text, (self.crafting_rect.centerx - 30 + self.camera.camera.x, self.crafting_rect.centery - 10 + self.camera.camera.y))
-        
-        # Shop
-        pygame.draw.rect(screen, (218, 165, 32), self.camera.apply_rect(self.shop_rect)) # Goldenrod
-        shop_text = self.font.render("Shop", True, WHITE)
-        screen.blit(shop_text, (self.shop_rect.centerx - 20 + self.camera.camera.x, self.shop_rect.centery - 10 + self.camera.camera.y))
-        
-        # Research
-        pygame.draw.rect(screen, (70, 130, 180), self.camera.apply_rect(self.research_rect)) # Steel Blue
-        res_text = self.font.render("Research", True, WHITE)
-        screen.blit(res_text, (self.research_rect.centerx - 30 + self.camera.camera.x, self.research_rect.centery - 10 + self.camera.camera.y))
-        
-        # Draw Player (World Space)
-        if hasattr(self.game.player, 'image'):
-            screen.blit(self.game.player.image, self.camera.apply_rect(self.game.player.rect))
-        else:
-            pygame.draw.rect(screen, BLUE, self.camera.apply_rect(self.game.player.rect))
-            
-        # Draw Golems
-        for golem in self.golems:
-            screen.blit(golem.image, self.camera.apply_rect(golem.rect))
-            
-        # Draw Expansion Queue (Ghost Tiles)
-        for tile_pos in self.expansion_queue:
-            rect = pygame.Rect(tile_pos[0] * TILE_SIZE, tile_pos[1] * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            s = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-            s.fill((255, 255, 0, 100)) # Yellow transparent
-            screen.blit(s, self.camera.apply_rect(rect))
+            screen.blit(highlight_surf, self.camera.apply_rect(pygame.Rect(tile_x, tile_y, TILE_SIZE, TILE_SIZE)))
         
         # --- DRAW WORLD TO SCREEN (SCALED) ---
         scaled_surface = pygame.transform.scale(self.virtual_screen, (SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -945,7 +1191,8 @@ class HomeState(GameState):
         
         # Draw Stats UI (Left of Toolbar)
         stats_x = 20
-        stats_y = SCREEN_HEIGHT - 120
+        stats_x = 10
+        stats_y = SCREEN_HEIGHT - 140 # Adjusted for taller box (135px)
         
         if self.stats_bg_image:
             screen.blit(self.stats_bg_image, (stats_x, stats_y))
@@ -953,24 +1200,132 @@ class HomeState(GameState):
             pygame.draw.rect(screen, (50, 50, 50), (stats_x, stats_y, 150, 100))
             pygame.draw.rect(screen, WHITE, (stats_x, stats_y, 150, 100), 2)
         
-        rank_text = self.font.render(f"{self.game.player.rank}", True, WHITE)
-        gold_text = self.font.render(f"{self.game.player.gold}", True, YELLOW)
-        
-        # Intel Cap Logic
-        current_intel = int(self.game.player.intelligence)
-        rank = self.game.player.rank
-        if rank >= 4:
-            cap = current_intel
+        if self.bitmap_font:
+             # Rank
+             self.bitmap_font.render(screen, str(self.game.player.rank), stats_x + 68, stats_y + 12, scale=1.5, spacing=-10)
+             
+             # Intel Cap Logic
+             current_intel = int(self.game.player.intelligence)
+             rank = self.game.player.rank
+             if rank >= 4:
+                 cap = current_intel
+             else:
+                 cap = RANK_INTEL_CAPS.get(rank, 25)
+             
+             # Intel (current/cap)
+             # Basic formatting ensuring / exists
+             # If using K/M for intel, apply format_number to parts? For now keep simple.
+             intel_str = f"{current_intel}/{cap}"
+             self.bitmap_font.render(screen, intel_str, stats_x + 38, stats_y + 38, scale=1.5, spacing=-38)
+             
+             # Gold
+             gold_str = self.bitmap_font.format_number(self.game.player.gold)
+             self.bitmap_font.render(screen, gold_str, stats_x + 45, stats_y + 68, scale=1.5, spacing=-38)
+             
         else:
-            cap = RANK_INTEL_CAPS.get(rank, 25)
+            rank_text = self.font.render(f"{self.game.player.rank}", True, WHITE)
+            gold_text = self.font.render(f"{self.game.player.gold}", True, YELLOW)
             
-        intel_text = self.font.render(f"{current_intel}/{cap}", True, (100, 100, 255))
+            # Intel Cap Logic
+            current_intel = int(self.game.player.intelligence)
+            rank = self.game.player.rank
+            if rank >= 4:
+                cap = current_intel
+            else:
+                cap = RANK_INTEL_CAPS.get(rank, 25)
+                
+            intel_text = self.font.render(f"{current_intel}/{cap}", True, (100, 100, 255))
+            
+            screen.blit(rank_text, (stats_x + 90, stats_y + 19))
+            screen.blit(gold_text, (stats_x + 70, stats_y + 62))
+            screen.blit(intel_text, (stats_x + 70, stats_y + 38))
+
         
-        screen.blit(rank_text, (stats_x + 90, stats_y + 19))
-        screen.blit(gold_text, (stats_x + 70, stats_y + 62))
-        screen.blit(intel_text, (stats_x + 70, stats_y + 38))
+        # Draw Settings Button (Above Stats UI)
+        # Stats Y is ~SCREEN_HEIGHT - 140.
+        # Button 32x32.
+        # Padding 10px.
+        settings_x = stats_x
+        settings_y = stats_y - 32 - 10
+        self.btn_settings.rect.topleft = (settings_x, settings_y)
+        self.btn_settings.draw(screen)
         
-        # Draw Command Mode Indicator
+        # Draw Settings Popup
+        if self.show_settings:
+             # Center Screen
+             popup_w = 300
+             popup_h = 200
+             popup_rect = pygame.Rect((SCREEN_WIDTH - popup_w)//2, (SCREEN_HEIGHT - popup_h)//2, popup_w, popup_h)
+             
+             if self.template_box_image:
+                  # Use 3-slice or just scale the template box? 
+                  # User said "tampilkan saja dulu 'template box.png'".
+                  # Assuming template box is a scalable asset (9-slice would be ideal but maybe just scale)
+                  scaled_box = pygame.transform.scale(self.template_box_image, (popup_w, popup_h))
+                  screen.blit(scaled_box, popup_rect)
+             else:
+                  pygame.draw.rect(screen, GRAY, popup_rect)
+                  pygame.draw.rect(screen, WHITE, popup_rect, 2)
+                  
+             # Title "Settings"
+             title_surf = self.font.render("Settings", True, WHITE)
+             screen.blit(title_surf, (popup_rect.centerx - title_surf.get_width()//2, popup_rect.y + 20))
+             
+             # Volume Control
+             # Adjusted position to be inside the box
+             # Use smaller font as requested
+             vol_text = self.small_ui_font.render("Volume", True, WHITE)
+             screen.blit(vol_text, (popup_rect.x + 58, popup_rect.y + 70)) # Moved right from 40
+             
+             # Slider Bar
+             # BarRect should match image size (128x16)
+             bar_w = 128
+             bar_h = 16
+             bar_rect = pygame.Rect(popup_rect.x + 100, popup_rect.y + 70, bar_w, bar_h) # Moved left from 120 
+             
+             # Draw Box logic or Image
+             if self.value_bar_image and self.value_blue_image:
+                 # Draw Frame
+                 screen.blit(self.value_bar_image, bar_rect)
+                 
+                 # Draw/Clip Blue Fill
+                 # Fill width proportional to volume
+                 # Inner width 120, height 8. Padding 4,4.
+                 inner_max_w = 120
+                 fill_w = int(inner_max_w * self.game.volume)
+                 
+                 if fill_w > 0:
+                     # Create subsurface or clipped blit
+                     # Safeguard against fill_w being 0 or larger than image
+                     fill_w = max(0, min(fill_w, inner_max_w))
+                     
+                     # Subsurface is safer for blitting part of image
+                     # Assuming image is 120x8 exactly
+                     if fill_w > 0:
+                         sub_surf = self.value_blue_image.subsurface((0, 0, fill_w, 8))
+                         screen.blit(sub_surf, (bar_rect.x + 4, bar_rect.y + 4))
+             else:
+                 # Fallback
+                 pygame.draw.rect(screen, BLACK, bar_rect)
+                 fill_width = int(bar_rect.width * self.game.volume)
+                 pygame.draw.rect(screen, GREEN, (bar_rect.x, bar_rect.y, fill_width, bar_rect.height))
+                 pygame.draw.rect(screen, WHITE, bar_rect, 2)
+             
+             # Slider Knob (Square Button)
+             # Should follow the fill position? Or the bar?
+             # Slider knob usually centers on the current value point.
+             # Range is from x+4 to x+4+120 (120px travel).
+             travel_w = 120
+             knob_size = 20
+             # Knob X center matches value
+             knob_center_x = bar_rect.x + 4 + int(travel_w * self.game.volume)
+             knob_y = bar_rect.centery - knob_size // 2
+             
+             knob_rect = pygame.Rect(knob_center_x - knob_size//2, knob_y, knob_size, knob_size)
+             
+             pygame.draw.rect(screen, (200, 200, 200), knob_rect) # Light Gray face
+             pygame.draw.rect(screen, WHITE, knob_rect, 2) # Border
+
         if self.command_mode:
             cmd_text = self.font.render("COMMAND MODE (Click to Expand)", True, (255, 255, 0))
             screen.blit(cmd_text, (SCREEN_WIDTH // 2 - 150, 70))
@@ -984,8 +1339,10 @@ class HomeState(GameState):
         # Recipe Window / Crafting UI
         if self.show_recipes and hasattr(self, 'crafting_ui_screen_rect'):
             rect = self.crafting_ui_screen_rect
-            pygame.draw.rect(screen, GRAY, rect)
-            pygame.draw.rect(screen, WHITE, rect, 2)
+            # Background
+            self.draw_ui_background(screen, rect)
+            
+            # Title
             
             # Title
             title_surf = self.font.render("Crafting Station", True, BLACK)
@@ -1038,13 +1395,29 @@ class HomeState(GameState):
                 if list_rect.colliderect(btn.rect):
                     btn.draw(screen)
                     
+                    # Highlight Selected
+                    if self.selected_recipe == btn.text:
+                         if self.crafting_highlight_image:
+                              screen.blit(self.crafting_highlight_image, btn.rect)
+                         else:
+                              pygame.draw.rect(screen, YELLOW, btn.rect, 2)
+                    
             screen.set_clip(old_clip)
             
             # Draw Scrollbar if needed
             if max_scroll > 0:
                 scroll_bar_height = list_rect.height * (list_rect.height / total_height)
                 scroll_bar_y = list_rect.y + (self.crafting_scroll_y / max_scroll) * (list_rect.height - scroll_bar_height)
-                pygame.draw.rect(screen, GRAY, (list_rect.right - 10, scroll_bar_y, 8, scroll_bar_height))
+                
+                # Use slider image if available
+                if self.slider_image:
+                     # Force scale to calculated height and fixed width (Wider now)
+                     # User complained it was too thin. 
+                     # Increase width to 40px.
+                     sb_img = pygame.transform.scale(self.slider_image, (60, max(20, int(scroll_bar_height))))
+                     screen.blit(sb_img, (list_rect.right - 30, scroll_bar_y)) # Adjust X to align
+                else:
+                     pygame.draw.rect(screen, GRAY, (list_rect.right - 10, scroll_bar_y, 8, scroll_bar_height))
 
             # Draw Selected Recipe Details (Bottom Half)
             details_y_start = list_rect.bottom + 20
@@ -1100,8 +1473,8 @@ class HomeState(GameState):
         if self.show_shop and hasattr(self, 'shop_ui_screen_rect'):
             try:
                 rect = self.shop_ui_screen_rect
-                pygame.draw.rect(screen, GRAY, rect)
-                pygame.draw.rect(screen, WHITE, rect, 2)
+                # Background
+                self.draw_ui_background(screen, rect)
                 
                 header = self.font.render("General Store", True, WHITE)
                 screen.blit(header, (rect.centerx - header.get_width()//2, rect.y + 10))
@@ -1135,6 +1508,40 @@ class HomeState(GameState):
                         btn.draw(screen)
                         
                 screen.set_clip(None) # Reset clip
+                
+                # Draw Scrollbar if needed
+                # Re-calculate max scroll to verify
+                list_height = 250
+                item_height = 35
+                num_items = 0
+                if self.shop_tab == "buy":
+                    num_items = len(self.shop_buy_buttons)
+                elif self.shop_tab == "sell":
+                    num_items = len(self.shop_sell_buttons)
+                    
+                total_content_height = num_items * item_height
+                max_scroll = max(0, total_content_height - list_height)
+                
+                if max_scroll > 0:
+                    scroll_bar_height = list_height * (list_height / total_content_height)
+                    # Safety clamp
+                    scroll_bar_height = max(20, scroll_bar_height)
+                    
+                    scroll_info_denom = max_scroll
+                    if scroll_info_denom == 0: scroll_info_denom = 1
+                    
+                    scroll_pct = self.shop_scroll_y / scroll_info_denom
+                    scroll_bar_y = list_rect.y + scroll_pct * (list_height - scroll_bar_height)
+                    
+                    if self.slider_image:
+                         sb_width = 60 # Requested width
+                         sb_img = pygame.transform.scale(self.slider_image, (sb_width, int(scroll_bar_height)))
+                         # Position: Right side of list_rect, centered on the boundary?
+                         # Taking list_rect.right - (sb_width // 2) or similar
+                         # Crafting was list_rect.right - 30 for 60px width.
+                         screen.blit(sb_img, (list_rect.right - (sb_width // 2 + 10), scroll_bar_y))
+                    else:
+                         pygame.draw.rect(screen, GRAY, (list_rect.right - 10, scroll_bar_y, 8, scroll_bar_height))
                         
                 # Draw Selected Item Details
                 if self.selected_shop_item:
@@ -1158,13 +1565,22 @@ class HomeState(GameState):
                                 target_btn = self.shop_buy_buttons[i]
                                 break
                     elif self.shop_tab == "sell":
-                        # This is tricky because sell buttons are dynamic.
-                        # We rely on the button text or index.
-                        # Simplified: Just highlight the button if we can find it
-                        pass 
+                        # Match selected item to button index via inventory keys
+                        current_inv_items = list(self.game.player.inventory.keys())
+                        if self.selected_shop_item in current_inv_items:
+                            try:
+                                index = current_inv_items.index(self.selected_shop_item)
+                                if 0 <= index < len(self.shop_sell_buttons):
+                                    target_btn = self.shop_sell_buttons[index]
+                            except ValueError:
+                                pass 
                     
                     if target_btn:
-                        pygame.draw.rect(screen, YELLOW, target_btn.rect, 2)
+                        if self.research_highlight_image:
+                             # Use research highlight since it is 200px wide, same as shop buttons
+                             screen.blit(self.research_highlight_image, target_btn.rect)
+                        else:
+                             pygame.draw.rect(screen, YELLOW, target_btn.rect, 2)
                 
                 # Draw Close Button
                 self.btn_close_shop.draw(screen)
@@ -1174,8 +1590,8 @@ class HomeState(GameState):
         # Research UI
         if self.show_research and hasattr(self, 'research_ui_screen_rect'):
             rect = self.research_ui_screen_rect
-            pygame.draw.rect(screen, GRAY, rect)
-            pygame.draw.rect(screen, WHITE, rect, 2)
+            # Background
+            self.draw_ui_background(screen, rect)
             
             header = self.font.render("Research Center", True, WHITE)
             screen.blit(header, (rect.centerx - header.get_width()//2, rect.y + 10))
@@ -1190,7 +1606,10 @@ class HomeState(GameState):
                     
                     # Highlight selected
                     if topic == self.selected_research:
-                        pygame.draw.rect(screen, YELLOW, btn.rect, 2)
+                        if self.research_highlight_image:
+                             screen.blit(self.research_highlight_image, btn.rect)
+                        else:
+                             pygame.draw.rect(screen, YELLOW, btn.rect, 2)
                         
                     # Show status (Completed/In Progress)
                     if topic in self.research_system.completed_research:
@@ -1218,43 +1637,83 @@ class HomeState(GameState):
             window_y = (SCREEN_HEIGHT - window_height) // 2
             window_rect = pygame.Rect(window_x, window_y, window_width, window_height)
             
-            pygame.draw.rect(screen, GRAY, window_rect)
-            pygame.draw.rect(screen, WHITE, window_rect, 2)
+            # Background
+            self.draw_ui_background(screen, window_rect)
             
             header = self.font.render("Inventory", True, WHITE)
             screen.blit(header, (window_rect.centerx - header.get_width()//2, window_rect.y + 10))
             
             # Draw Grid
+            # Draw Grid
             inv_start_x = window_rect.x + 20
             inv_start_y = window_rect.y + 50
             grid_cols = 5
-            slot_size = 40
-            padding = 10
+            
+            # Layout Constants
+            grid_pitch = 50       # Distance between slot centers (was 40+10)
+            box_size = 46         # Visual size of the slot background (Target 46px)
+            item_size = 32        # Fixed size for items (to fit inside border)
+            
+            # Recalculate window size to fit grid
+            content_width = grid_cols * grid_pitch + 40 
+            content_height = 4 * grid_pitch + 100 
+            
+            if content_width > window_width:
+                 window_width = content_width
+                 window_rect.width = window_width
+                 window_rect.x = (SCREEN_WIDTH - window_width) // 2
+                 inv_start_x = window_rect.x + 20 # Re-align start x
+                 
+            if content_height > window_height:
+                 window_height = content_height
+                 window_rect.height = window_height
+                 window_rect.y = (SCREEN_HEIGHT - window_height) // 2
+                 inv_start_y = window_rect.y + 50 # Re-align start y
             
             # Inventory Slots
             items = list(self.game.player.inventory.items())
             for i in range(20): # 5x4 grid
                 col = i % grid_cols
                 row = i // grid_cols
-                x = inv_start_x + col * (slot_size + padding)
-                y = inv_start_y + row * (slot_size + padding)
-                rect = pygame.Rect(x, y, slot_size, slot_size)
                 
-                pygame.draw.rect(screen, DARK_GREEN, rect)
-                pygame.draw.rect(screen, WHITE, rect, 1)
+                # Calculate Center of Slot based on Pitch
+                center_x = inv_start_x + col * grid_pitch + grid_pitch // 2
+                center_y = inv_start_y + row * grid_pitch + grid_pitch // 2
+                
+                # Calculate Top-Left for Box (Centered)
+                box_x = center_x - box_size // 2
+                box_y = center_y - box_size // 2
+                rect = pygame.Rect(box_x, box_y, box_size, box_size)
+                
+                if self.toolbar_box_image:
+                     # Scale box to visual size (46x46)
+                     box_img = pygame.transform.scale(self.toolbar_box_image, (box_size, box_size))
+                     screen.blit(box_img, (box_x, box_y))
+                else:
+                     pygame.draw.rect(screen, DARK_GREEN, rect)
+                     pygame.draw.rect(screen, WHITE, rect, 1)
                 
                 if i < len(items):
                     item_name, count = items[i]
-                    # Draw Item (Placeholder color/text)
-                    pygame.draw.rect(screen, PURPLE, (x+2, y+2, slot_size-4, slot_size-4))
-                    # Draw Count
+                    
+                    # Draw Item Icon (Centered, Fixed Size)
+                    item_x = center_x - item_size // 2
+                    item_y = center_y - item_size // 2
+                    
+                    # Placeholder Item Icon
+                    pygame.draw.rect(screen, PURPLE, (item_x, item_y, item_size, item_size))
+                    
+                    # Draw Count (Bottom Right of item area)
                     count_text = self.font.render(str(count), True, WHITE)
-                    screen.blit(count_text, (x + 2, y + 2))
+                    screen.blit(count_text, (item_x + 2, item_y + 2))
                     
             # Dragging Item
             if self.dragging_item:
                 mouse_pos = pygame.mouse.get_pos()
                 pygame.draw.circle(screen, YELLOW, mouse_pos, 10) # Cursor indicator
+
+            # Draw Close Button
+            self.btn_close_inventory.draw(screen)
 
         # Persistent Toolbar (Screen Space - Bottom Center)
         toolbar_start_x = (SCREEN_WIDTH - (9 * 40)) // 2
@@ -1264,16 +1723,13 @@ class HomeState(GameState):
             x = toolbar_start_x + i * 40
             rect = pygame.Rect(x, toolbar_y, 32, 32)
             
-            # Highlight selected
-            if i == self.game.player.selected_slot:
-                try:
-                    pygame.draw.rect(screen, YELLOW, pygame.Rect(x-2, toolbar_y-2, 36, 36), 2)
-                except Exception as e:
-                    print(f"Error drawing highlight: {e}")
-            
-            pygame.draw.rect(screen, BLACK, rect)
-            pygame.draw.rect(screen, WHITE, rect, 1)
-            
+            # Draw Slot Background
+            if self.toolbar_box_image:
+                 screen.blit(self.toolbar_box_image, (x, toolbar_y))
+            else:
+                 pygame.draw.rect(screen, BLACK, rect)
+                 pygame.draw.rect(screen, WHITE, rect, 1)
+
             slot_data = self.game.player.toolbar[i]
             if slot_data:
                 # Draw Item Icon (Placeholder)
@@ -1291,6 +1747,19 @@ class HomeState(GameState):
                     self.small_font = pygame.font.SysFont(None, 12)
                 name_surf = self.small_font.render(name[:3], True, WHITE)
                 screen.blit(name_surf, (x+2, toolbar_y+20))
+
+            # Highlight selected (Drawn ON TOP of item)
+            if i == self.game.player.selected_slot:
+                if self.highlight_image:
+                    # Draw aligned with box (Centered over 34x34 box)
+                    screen.blit(self.highlight_image, (x - 3, toolbar_y - 3))
+                else:
+                    try:
+                        # Fallback
+                        highlight_rect = pygame.Rect(x-2, toolbar_y-2, 38, 38)
+                        pygame.draw.rect(screen, YELLOW, highlight_rect, 2)
+                    except Exception as e:
+                        print(f"Error drawing highlight: {e}")
 
         # Draw Player Coordinates (Top-Left)
         player_pos_text = self.font.render(f"Pos: ({self.game.player.rect.x}, {self.game.player.rect.y})", True, WHITE)

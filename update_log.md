@@ -71,3 +71,31 @@
     - **Fairy Spawning**: Forest Fairies now only spawn at Rank 4+.
     - **Potion Overdose**: Intelligence Potion usage is capped by Rank limits.
     - **Crafting UI**: Fixed selection and rendering issues with scrolling.
+
+## [Day-2 Release]
+### Features
+- **Opening Screen**: Added a cinematic opening video with fade transition.
+- **Settings System**:
+    - **UI**: Added a settings button and a popup menu.
+    - **Volume**: Implemented master volume control with a slider and mute toggle.
+    - **Global Access**: Settings are accessible from both Home and Exploration states.
+- **Audio**: Added looping Background Music.
+- **Map System**:
+    - **Boundaries**: Implemented strict camera and player clamping to hide map edges/void.
+    - **Building Reposition**: Moved Shop and other buildings to ensure they are within safe bounds.
+    - **Persistent Position**: Player now remembers their location when switching between Home and Forest.
+
+### UI/UX Refinements
+- **Stats UI**:
+    - **Design**: New background image and layout.
+    - **Font**: Switched to a custom pixel font for better aesthetic match.
+    - **Coordinates**: Added player coordinate display (Top-Left).
+- **Shop & Crafting**:
+    - **Styling**: Unified button styles and added selection highlights.
+    - **Scrollbars**: Added custom scrollbars to item lists.
+- **Inventory**:
+    - **Visuals**: Updated slot background.
+    - **Sizing**: Increased slot size and centered items for better clarity.
+- **Exploration UI**:
+    - **Synchronization**: Synced toolbox and health bar visuals with the Home state style.
+
