@@ -8,18 +8,8 @@ class Player(pygame.sprite.Sprite):
         import os
         
         # Dynamic path finding for assets
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        spritesheet_path = None
-        while True:
-            potential_path = os.path.join(current_dir, "assets", "spritesheets_walk.png")
-            if os.path.exists(potential_path):
-                spritesheet_path = potential_path
-                break
-            
-            parent_dir = os.path.dirname(current_dir)
-            if parent_dir == current_dir: # Reached root
-                raise FileNotFoundError("Could not find assets/spritesheets_walk.png")
-            current_dir = parent_dir
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        spritesheet_path = os.path.join(base_dir, "assets", "spritesheets_walk.png")
             
         self.spritesheet = pygame.image.load(spritesheet_path).convert_alpha()
 
@@ -72,9 +62,46 @@ class Player(pygame.sprite.Sprite):
         
         self.teleport_cooldown_end = 0.0 # Timestamp
         
+        # Player Stats
+        self.rank = 1
+        self.intelligence = 14
+        self.brain_shape = "Smooth" # Flavor text
+        self.fairies_caught = 0
+        
         # Toolbar: 9 slots, stores item names or None
         self.toolbar = [None] * 9 
         self.selected_slot = 0 # Index 0-8
+        # self.rank = 3 # Removed duplicate assignment
+        
+        # Starting Items (Dev Helper)
+        self.gold = 1000
+        self.inventory["Red Herb"] = 9
+        self.inventory["Blue Herb"] = 9
+        self.inventory["Health Potion"] = 5
+        self.inventory["Hoe"] = 1
+        self.inventory["Watering Can"] = 1
+        self.inventory["Water"] = 9
+        
+        # Add some to toolbar for convenience
+        self.toolbar[0] = {'name': 'Watering Can', 'count': 1}
+        self.toolbar[1] = {'name': 'Hoe', 'count': 1}
+        self.toolbar[2] = {'name': 'Health Potion', 'count': 3}
+        self.toolbar[3] = {'name': 'Intelligence Potion', 'count': 9}
+        self.toolbar[4] = {'name': 'Rank Up Potion', 'count': 9}
+
+        # Sounds
+        self.snd_walking_path = os.path.join(base_dir, "assets", "sounds", "sfx", "walking.wav")
+        self.walking_sound = None
+        self.is_walking_sound_playing = False
+        
+        if os.path.exists(self.snd_walking_path):
+            try:
+                self.walking_sound = pygame.mixer.Sound(self.snd_walking_path)
+                self.walking_sound.set_volume(0.4) # Not too loud
+            except Exception as e:
+                print(f"Error loading walking sound: {e}")
+        else:
+            print(f"Warning: Walking sound not found at {self.snd_walking_path}")
     
     @staticmethod
     def get_frame(sheet, frame_width, frame_height, fx, fy):
@@ -97,46 +124,74 @@ class Player(pygame.sprite.Sprite):
                 print("Speed effect wore off.")
             elif effect == "Invisibility":
                 print("Invisibility effect wore off.")
+            elif effect == "Intelligence":
+                self.intelligence -= 10
+                print("Intelligence effect wore off.")
 
         # --- MOVEMENT + ANIMATION ---
         keys = pygame.key.get_pressed()
         moving = False
+        
+        dx = 0
+        dy = 0
 
-        # Gerak kiri
         if keys[pygame.K_a]:
-            self.rect.x -= self.velocity
-            self.current_anim = self.anim_left
+            dx -= 1
+        if keys[pygame.K_d]:
+            dx += 1
+        if keys[pygame.K_w]:
+            dy -= 1
+        if keys[pygame.K_s]:
+            dy += 1
+            
+        if dx != 0 or dy != 0:
             moving = True
-
-        # Gerak kanan
-        elif keys[pygame.K_d]:
-            self.rect.x += self.velocity
-            self.current_anim = self.anim_right
-            moving = True
-
-        # Gerak atas
-        elif keys[pygame.K_w]:
-            self.rect.y -= self.velocity
-            self.current_anim = self.anim_up
-            moving = True
-
-        # Gerak bawah
-        elif keys[pygame.K_s]:
-            self.rect.y += self.velocity
-            self.current_anim = self.anim_down
-            moving = True
+            
+            # Normalize vector
+            length = (dx**2 + dy**2)**0.5
+            dx = dx / length
+            dy = dy / length
+            
+            self.rect.x += dx * self.velocity
+            self.rect.y += dy * self.velocity
+            
+            # Update Animation based on direction
+            if dx < 0:
+                self.current_anim = self.anim_left
+            elif dx > 0:
+                self.current_anim = self.anim_right
+            elif dy < 0:
+                self.current_anim = self.anim_up
+            elif dy > 0:
+                self.current_anim = self.anim_down
 
         # --- ANIMATE ---
         if moving:
             self.frame_timer += 1
-            if self.frame_timer >= 10:   # atur kecepatan animasi
+            if self.frame_timer >= 5:   # atur kecepatan animasi
                 self.frame_timer = 0
                 self.current_frame = (self.current_frame + 1) % len(self.current_anim)
                 self.image = self.current_anim[self.current_frame]
+            
+            # Sound Logic
+            if self.walking_sound and not self.is_walking_sound_playing:
+                self.walking_sound.play(-1) # Loop indefinitely
+                self.is_walking_sound_playing = True
         else:
             # Idle → frame ke-0
             self.current_frame = 0
             self.image = self.current_anim[0]
+            
+            # Stop Sound
+            if self.walking_sound and self.is_walking_sound_playing:
+                self.walking_sound.stop()
+                self.is_walking_sound_playing = False
+                
+    def stop_walking_sound(self):
+        """Explicitly stops the walking sound."""
+        if self.walking_sound and self.is_walking_sound_playing:
+            self.walking_sound.stop()
+            self.is_walking_sound_playing = False
 
     def add_item(self, item_name):
         # Check toolbar first
@@ -153,7 +208,18 @@ class Player(pygame.sprite.Sprite):
             self.inventory[item_name] = 1
         print(f"Collected {item_name}. Inventory: {self.inventory}")
 
-    def use_item(self, item_name, source="inventory", slot_index=None):
+    def use_item(self, item_name=None, source="inventory", slot_index=None):
+        # If no item specified, try to use selected toolbar item
+        if item_name is None:
+            slot_data = self.toolbar[self.selected_slot]
+            if slot_data:
+                item_name = slot_data['name']
+                source = "toolbar"
+                slot_index = self.selected_slot
+            else:
+                print("No item selected.")
+                return False
+
         # Check availability
         if source == "inventory":
             if item_name not in self.inventory or self.inventory[item_name] <= 0:
@@ -179,6 +245,44 @@ class Player(pygame.sprite.Sprite):
         elif item_name == "Mana Potion":
             # Placeholder for mana
             print("Used Mana Potion! (Mana not implemented yet)")
+            used = True
+        elif item_name == "Intelligence Potion":
+            self.effects["Intelligence"] = 1200 # 20 seconds
+            
+            # Calculate potential new intelligence
+            increase = 10
+            new_intel = self.intelligence + increase
+            
+            # Apply Rank Cap
+            if self.rank < 4:
+                cap = RANK_INTEL_CAPS.get(self.rank, 25)
+                self.intelligence = min(new_intel, cap)
+            else:
+                self.intelligence = new_intel
+                
+            print(f"Used Intelligence Potion! Intelligence: {self.intelligence}")
+            used = True
+        elif item_name == "Rank Up Potion":
+            # Check Max Rank (Temporary Limit: Rank 4)
+            if self.rank >= 4:
+                print("Max Rank Reached (for now)!")
+                return False
+                
+            # Check Intelligence Requirement
+            req_intel = RANK_INTEL_CAPS.get(self.rank, 999)
+            if self.intelligence < req_intel:
+                print(f"Not enough Intelligence! Need {req_intel} to Rank Up.")
+                return False
+                
+            if self.rank < 9:
+                self.rank += 1
+                self.intelligence += 5 # Permanent boost
+                print(f"Used Rank Up Potion! Rank Up! New Rank: {self.rank}")
+                # Update brain shape flavor text
+                shapes = ["Smooth", "Wrinkled", "Folded", "Complex", "Glowing", "Radiant", "Cosmic", "Transcendent", "Omniscient"]
+                self.brain_shape = shapes[self.rank - 1]
+            else:
+                print("Already at Max Rank!")
             used = True
         
         if used:
