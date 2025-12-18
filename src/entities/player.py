@@ -186,6 +186,12 @@ class Player(pygame.sprite.Sprite):
             if self.walking_sound and self.is_walking_sound_playing:
                 self.walking_sound.stop()
                 self.is_walking_sound_playing = False
+                
+    def stop_walking_sound(self):
+        """Explicitly stops the walking sound."""
+        if self.walking_sound and self.is_walking_sound_playing:
+            self.walking_sound.stop()
+            self.is_walking_sound_playing = False
 
     def add_item(self, item_name):
         # Check toolbar first

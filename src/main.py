@@ -7,6 +7,7 @@ from src.states.exploration import ExplorationState
 from src.states.opening import OpeningState
 from src.states.room import RoomState
 from src.assets import AUDIO_BGM
+from src.systems.research import ResearchSystem
 import os
 
 class Game:
@@ -31,6 +32,7 @@ class Game:
             print(f"Warning: BGM not found at {AUDIO_BGM}")
         
         self.player = Player(90, 165)
+        self.research_system = ResearchSystem() # Shared Research State
         # self.gold moved to player.gold
         
         self.states = {

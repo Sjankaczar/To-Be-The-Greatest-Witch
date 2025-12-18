@@ -35,7 +35,7 @@ class RoomState(GameState):
             pygame.Rect(43, 38, 202, 1),
             pygame.Rect(275, 60, 1, 202),
             pygame.Rect(10, 60, 1, 202),
-            pygame.Rect(133, 168, 16, 16)
+            # pygame.Rect(133, 168, 16, 16)
         ]
         
         # --- UI ASSETS ---
@@ -59,16 +59,34 @@ class RoomState(GameState):
         if os.path.exists(IMG_SLIDER):
              self.slider_image = pygame.image.load(IMG_SLIDER).convert_alpha()
         if os.path.exists(IMG_HIGHLIGHT_SLOT):
-             self.crafting_highlight_image = pygame.image.load(IMG_HIGHLIGHT_SLOT).convert_alpha()
-             self.research_highlight_image = pygame.image.load(IMG_HIGHLIGHT_SLOT).convert_alpha()
+             raw = pygame.image.load(IMG_HIGHLIGHT_SLOT).convert_alpha()
+             self.crafting_highlight_image = self.create_3_slice_highlight(raw, 300, 30)
+             self.research_highlight_image = self.create_3_slice_highlight(raw, 300, 30)
+             self.tab_highlight_image = self.create_3_slice_highlight(raw, 80, 30)
         if os.path.exists(IMG_TEMPLATE_BOX):
              self.template_box_image = pygame.image.load(IMG_TEMPLATE_BOX).convert_alpha()
+        
+        # Load Progress Bar Images
+        self.bar_bg_image = None
+        self.bar_fill_image = None
+        if os.path.exists(IMG_VALUE_BAR):
+             self.bar_bg_image = pygame.image.load(IMG_VALUE_BAR).convert_alpha()
+        if os.path.exists(IMG_VALUE_BLUE):
+             self.bar_fill_image = pygame.image.load(IMG_VALUE_BLUE).convert_alpha()
 
         # --- CHOICE UI ---
         self.show_choice_ui = False
-        self.btn_choice_craft = Button(SCREEN_WIDTH//2 - 110, SCREEN_HEIGHT//2, 100, 40, "Craft", self.font, (100, 100, 100), image=self.button_image)
-        self.btn_choice_research = Button(SCREEN_WIDTH//2 + 10, SCREEN_HEIGHT//2, 100, 40, "Research", self.font, (100, 100, 100), image=self.button_image)
-        self.btn_close_ui = Button(SCREEN_WIDTH//2 + 80, SCREEN_HEIGHT//2 - 60, 30, 30, "X", self.font, RED, image=self.quit_icon_image)
+        # Define Rect for background (Even Larger)
+        self.choice_ui_rect = pygame.Rect(0, 0, 400, 100)
+        self.choice_ui_rect.center = (SCREEN_WIDTH//2, SCREEN_HEIGHT//2)
+        
+        # Center Buttons vertically in the middle (since no title)
+        btn_y = self.choice_ui_rect.centery - 20
+        self.btn_choice_craft = Button(self.choice_ui_rect.centerx - 117, btn_y, 100, 40, "Craft", self.font, (100, 100, 100), image=self.button_image)
+        self.btn_choice_research = Button(self.choice_ui_rect.centerx + 3, btn_y, 100, 40, "Research", self.font, (100, 100, 100), image=self.button_image)
+        
+        # Close Button moved slightly left (was -40, now -55)
+        self.btn_close_ui = Button(self.choice_ui_rect.right - 105, self.choice_ui_rect.top , 30, 30, "X", self.font, RED, image=self.quit_icon_image)
 
         # --- CRAFTING UI ---
         # Height 450 to fit details
@@ -87,11 +105,12 @@ class RoomState(GameState):
         ui_x = self.crafting_ui_screen_rect.x
         ui_y = self.crafting_ui_screen_rect.y
         
-        self.btn_tab_potions = Button(ui_x + 20, ui_y + 40, 80, 30, "Potions", self.font, color=(150, 150, 150), image=self.button_image)
-        self.btn_tab_seeds = Button(ui_x + 110, ui_y + 40, 80, 30, "Seeds", self.font, color=(150, 150, 150), image=self.button_image)
-        self.btn_tab_golems = Button(ui_x + 200, ui_y + 40, 80, 30, "Golems", self.font, color=(150, 150, 150), image=self.button_image)
+        # Centre Align 2 Tabs (Total width ~400 internal, so center is ~200)
+        # 112 was potion start. With 2 tabs, let's center them.
+        self.btn_tab_potions = Button(ui_x + 150, ui_y + 75, 80, 30, "Potions", self.font, color=(150, 150, 150), image=self.button_image)
+        self.btn_tab_seeds = Button(ui_x + 250, ui_y + 75, 80, 30, "Seeds", self.font, color=(150, 150, 150), image=self.button_image)
         
-        self.btn_close_crafting = Button(self.crafting_ui_screen_rect.right - 35, self.crafting_ui_screen_rect.y + 5, 30, 30, "X", self.font, RED, image=self.quit_icon_image)
+        self.btn_close_crafting = Button(self.crafting_ui_screen_rect.right - 125, self.crafting_ui_screen_rect.y + 30, 30, 30, "X", self.font, RED, image=self.quit_icon_image)
         self.btn_craft_action = Button(0, 0, 100, 30, "Craft", self.font, (20, 100, 20), image=self.button_image)
 
         # Init Crafting System
@@ -108,14 +127,36 @@ class RoomState(GameState):
         self.research_buttons = []
         
         self.btn_start_research = Button(0, 0, 120, 30, "Start", self.font, (100, 100, 255), image=self.button_image)
-        self.btn_close_research = Button(self.research_ui_rect.right - 35, self.research_ui_rect.y + 5, 30, 30, "X", self.font, RED, image=self.quit_icon_image)
+        self.btn_close_research = Button(self.research_ui_rect.right - 123, self.research_ui_rect.y + 21, 30, 30, "X", self.font, RED, image=self.quit_icon_image)
 
-        if not hasattr(self.game, 'research_system'):
-             self.game.research_system = ResearchSystem()
         self.research_system = self.game.research_system
         
         self.update_research_list()
 
+    def create_3_slice_highlight(self, raw_img, target_w, target_h):
+        # 1. Scale uniformly to target height to establish correct border thickness
+        # This assumes the visual "height" of the border should roughly equal the button height
+        base_surf = pygame.transform.scale(raw_img, (target_h, target_h))
+        
+        # 2. Slice
+        border_w = 10
+        left_part = base_surf.subsurface((0, 0, border_w, target_h))
+        right_part = base_surf.subsurface((target_h - border_w, 0, border_w, target_h))
+        mid_part = base_surf.subsurface((border_w, 0, target_h - 2 * border_w, target_h))
+        
+        # 3. Stretch Middle
+        mid_width = target_w - 2 * border_w
+        if mid_width < 0: mid_width = 0
+        mid_stretched = pygame.transform.scale(mid_part, (mid_width, target_h))
+        
+        # 4. Assemble
+        final_surf = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+        final_surf.blit(left_part, (0, 0))
+        final_surf.blit(mid_stretched, (border_w, 0))
+        final_surf.blit(right_part, (target_w - border_w, 0))
+        
+        return final_surf
+        
     def enter(self):
         print("Entering Room State")
         self.game.player.rect.topleft = self.start_pos
@@ -126,12 +167,12 @@ class RoomState(GameState):
     def update_research_list(self):
         self.research_buttons = []
         topics = self.research_system.topics
-        start_y = self.research_ui_rect.y + 60
+        start_y = self.research_ui_rect.y + 65
         
         for i, topic in enumerate(topics.keys()):
              # Center buttons: Panel width 500. Button width 300.
              btn_w = 300
-             btn_x = self.research_ui_rect.centerx - (btn_w // 2)
+             btn_x = self.research_ui_rect.centerx - (btn_w // 2) - 10
              btn = Button(btn_x, start_y + i * 40, btn_w, 30, topic, self.font, color=(128, 128, 128), image=self.button_image)
              self.research_buttons.append(btn)
 
@@ -142,10 +183,9 @@ class RoomState(GameState):
             recipes = ["Health Potion", "Mana Potion", "Speed Potion", "Invisibility Potion", "Intelligence Potion", "Rank Up Potion"]
         elif self.crafting_tab == "Seeds":
             recipes = ["Red Seed", "Blue Seed", "Rare Seed"]
-        elif self.crafting_tab == "Golems":
-            recipes = ["Wood Golem"]
+
             
-        start_y = self.crafting_ui_screen_rect.y + 80
+        start_y = self.crafting_ui_screen_rect.y + 115
         for i, r in enumerate(recipes):
             # Use 300 width for buttons
             btn = Button(self.crafting_ui_screen_rect.x + 20, start_y + i * 35, 300, 30, r, self.font, color=(128, 128, 128), image=self.button_image)
@@ -187,10 +227,7 @@ class RoomState(GameState):
                      self.crafting_tab = "Seeds"
                      self.selected_recipe = None
                      self.update_recipe_list()
-                if self.btn_tab_golems.handle_event(event):
-                     self.crafting_tab = "Golems"
-                     self.selected_recipe = None
-                     self.update_recipe_list()
+
                      
                 # Scroll Logic (Mouse Wheel)
                 if event.type == pygame.MOUSEWHEEL:
@@ -200,7 +237,7 @@ class RoomState(GameState):
                     self.crafting_scroll_y = max(0, min(self.crafting_scroll_y - event.y * 20, max_scroll))
                      
                 # Recipe Selection (Click on List)
-                list_rect = pygame.Rect(self.crafting_ui_screen_rect.x + 20, self.crafting_ui_screen_rect.y + 80, self.crafting_ui_screen_rect.width - 40, 175)
+                list_rect = pygame.Rect(self.crafting_ui_screen_rect.x + 20, self.crafting_ui_screen_rect.y + 115, self.crafting_ui_screen_rect.width - 40, 175)
                 
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                      if list_rect.collidepoint(event.pos):
@@ -249,11 +286,15 @@ class RoomState(GameState):
                  if event.type == pygame.KEYDOWN:
                      if event.key == pygame.K_f:
                           # Check interaction (simplified check for table area)
-                          interact_rect = pygame.Rect(100, 100, 100, 100)
+                          interact_rect = pygame.Rect(58, 54, 15, 25)
                           if self.game.player.rect.colliderect(interact_rect):
                                self.show_choice_ui = True
+                               self.game.player.stop_walking_sound()
                 
     def update(self):
+        # Always update research system
+        self.research_system.update(self.game.player.intelligence)
+        
         if self.show_choice_ui or self.show_crafting_ui or self.show_research_ui:
              pass 
         else:
@@ -295,6 +336,8 @@ class RoomState(GameState):
              pygame.draw.rect(screen, (50, 50, 50), rect)
              pygame.draw.rect(screen, WHITE, rect, 2)
 
+
+
     def draw(self, screen):
         self.display_surface.fill(BLACK)
         
@@ -321,6 +364,10 @@ class RoomState(GameState):
              overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
              overlay.fill((0, 0, 0, 150))
              screen.blit(overlay, (0,0))
+             
+             # Draw Background Box
+             self.draw_ui_background(screen, self.choice_ui_rect)
+             
              self.btn_choice_craft.draw(screen)
              self.btn_choice_research.draw(screen)
              self.btn_close_ui.draw(screen)
@@ -332,24 +379,29 @@ class RoomState(GameState):
             
             # Title
             title_surf = self.title_font.render("Crafting Station", True, BLACK)
-            screen.blit(title_surf, (self.crafting_ui_screen_rect.centerx - title_surf.get_width() // 2, self.crafting_ui_screen_rect.y + 10))
+            screen.blit(title_surf, (self.crafting_ui_screen_rect.centerx - (title_surf.get_width() // 2) - 5, self.crafting_ui_screen_rect.y + 40))
             
             # Draw Tabs
             self.btn_tab_potions.draw(screen)
             self.btn_tab_seeds.draw(screen)
-            self.btn_tab_golems.draw(screen)
             
             # Highlight selected tab
+            target_rect = None
             if self.crafting_tab == "Potions":
-                pygame.draw.rect(screen, YELLOW, self.btn_tab_potions.rect, 2)
+                target_rect = self.btn_tab_potions.rect
             elif self.crafting_tab == "Seeds":
-                pygame.draw.rect(screen, YELLOW, self.btn_tab_seeds.rect, 2)
-            elif self.crafting_tab == "Golems":
-                pygame.draw.rect(screen, YELLOW, self.btn_tab_golems.rect, 2)
+                target_rect = self.btn_tab_seeds.rect
+
+                
+            if target_rect:
+                if hasattr(self, 'tab_highlight_image') and self.tab_highlight_image:
+                     screen.blit(self.tab_highlight_image, target_rect)
+                else:
+                     pygame.draw.rect(screen, YELLOW, target_rect, 2)
 
             # Draw List Area (No background)
             list_height = 175
-            list_rect = pygame.Rect(self.crafting_ui_screen_rect.x + 20, self.crafting_ui_screen_rect.y + 80, self.crafting_ui_screen_rect.width - 40, list_height)
+            list_rect = pygame.Rect(self.crafting_ui_screen_rect.x + 20, self.crafting_ui_screen_rect.y + 115, self.crafting_ui_screen_rect.width - 40, list_height)
             # Clip drawing
             old_clip = screen.get_clip()
             screen.set_clip(list_rect)
@@ -363,8 +415,8 @@ class RoomState(GameState):
             start_y = list_rect.y - self.crafting_scroll_y
             
             for i, btn in enumerate(self.recipe_buttons):
-                # Center buttons
-                btn.rect.x = list_rect.centerx - (btn.rect.width // 2)
+                # Center buttons adjusted right (+10 offset)
+                btn.rect.x = list_rect.centerx - (btn.rect.width // 2) - 10
                 btn.rect.y = start_y + i * 35
                 btn.rect.height = 30
                 
@@ -372,7 +424,10 @@ class RoomState(GameState):
                     btn.draw(screen)
                     # Highlight Selected - Use CLEAN rect border as requested for "Rapi"
                     if self.selected_recipe == btn.text:
-                        pygame.draw.rect(screen, YELLOW, btn.rect, 2)
+                        if self.crafting_highlight_image:
+                            screen.blit(self.crafting_highlight_image, btn.rect)
+                        else:
+                            pygame.draw.rect(screen, YELLOW, btn.rect, 2)
                     
             screen.set_clip(old_clip)
             
@@ -382,7 +437,7 @@ class RoomState(GameState):
                 scroll_bar_y = list_rect.y + (self.crafting_scroll_y / max_scroll) * (list_rect.height - scroll_bar_height)
                 if self.slider_image:
                     sb_img = pygame.transform.scale(self.slider_image, (40, max(20, int(scroll_bar_height))))
-                    screen.blit(sb_img, (list_rect.right - 20, scroll_bar_y))
+                    screen.blit(sb_img, (list_rect.right - 107, scroll_bar_y))
                 else:
                     pygame.draw.rect(screen, GRAY, (list_rect.right - 10, scroll_bar_y, 8, scroll_bar_height))
 
@@ -395,7 +450,7 @@ class RoomState(GameState):
                 if recipe:
                     ingredients, time_val = recipe
                     name_text = self.font.render(f"Selected: {self.selected_recipe}", True, YELLOW)
-                    screen.blit(name_text, (self.crafting_ui_screen_rect.x + 20, details_y_start))
+                    screen.blit(name_text, (self.crafting_ui_screen_rect.x + 100, details_y_start-17))
                     
                     ing_y = details_y_start + 30
                     for item, count in ingredients.items():
@@ -406,25 +461,64 @@ class RoomState(GameState):
                         
                         color = GREEN if has >= count else RED
                         ing_text = self.font.render(f"{item}: {has}/{count}", True, color)
-                        screen.blit(ing_text, (self.crafting_ui_screen_rect.x + 20, ing_y))
-                        ing_y += 25
+                        screen.blit(ing_text, (self.crafting_ui_screen_rect.x + 100, ing_y - 25))
+                        ing_y += 18
 
                     # Draw Craft Button or Lock logic
                     req_rank = self.crafting_system.get_required_rank(self.selected_recipe)
                     if self.game.player.rank >= req_rank:
-                        self.btn_craft_action.rect.topleft = (self.crafting_ui_screen_rect.centerx - 50, self.crafting_ui_screen_rect.bottom - 50)
-                        self.btn_craft_action.draw(screen)
+                        # Only show Craft button if NO active crafting matching this recipe (or generally not crafting)
+                        # User wants button hidden if bar is visible. Bar is visible if crafting_timer > 0.
+                        # Wait, user said "tombol craft hilang... muncul kembali apabila bar selesai".
+                        # So if ANY crafting is happening? Or just check timer?
+                        # Simplest: if crafting_timer == 0, show button.
+                        if self.crafting_timer == 0:
+                            self.btn_craft_action.rect.topleft = (self.crafting_ui_screen_rect.centerx - 50, self.crafting_ui_screen_rect.bottom - 90)
+                            self.btn_craft_action.draw(screen)
                     else:
                         lock_text = self.font.render(f"Unlocked at Rank {req_rank}", True, RED)
-                        screen.blit(lock_text, (self.crafting_ui_screen_rect.centerx - lock_text.get_width()//2, self.crafting_ui_screen_rect.bottom - 50))
+                        screen.blit(lock_text, (self.crafting_ui_screen_rect.centerx - lock_text.get_width()//2, self.crafting_ui_screen_rect.bottom - 80))
                     
                     # Draw Progress Bar
                     if self.crafting_timer > 0 and self.crafting_target == self.selected_recipe:
                         progress = 1 - (self.crafting_timer / self.crafting_duration)
-                        bar_rect = pygame.Rect(self.crafting_ui_screen_rect.x + 50, self.crafting_ui_screen_rect.bottom - 80, self.crafting_ui_screen_rect.width - 100, 20)
-                        pygame.draw.rect(screen, BLACK, bar_rect)
-                        pygame.draw.rect(screen, BLUE, (bar_rect.x, bar_rect.y, bar_rect.width * progress, 20))
-                        pygame.draw.rect(screen, WHITE, bar_rect, 2)
+                        # Reduce width to 200 (centered).
+                        bar_w = 200
+                        # Shift Left 25px
+                        bar_x = self.crafting_ui_screen_rect.centerx - (bar_w // 2) - 7
+                        # Position it where button was (bottom - 90) or slightly lower. Button is 30px high.
+                        # Button y = bottom - 90.
+                        bar_h = 24
+                        bar_rect = pygame.Rect(bar_x, self.crafting_ui_screen_rect.bottom - 85, bar_w, bar_h)
+                        
+                        if getattr(self, 'bar_bg_image', None) and getattr(self, 'bar_fill_image', None):
+                            # Draw Background
+                            bg_scaled = pygame.transform.scale(self.bar_bg_image, (bar_w, bar_h))
+                            screen.blit(bg_scaled, bar_rect)
+                            
+                            # Calculate Fill Dimensions based on original asset ratio
+                            # ValueBar: 128x16, ValueBlue: 120x8
+                            # Margin X = (128-120)/2 = 4 (relative to 128) -> 4/128 = 0.03125
+                            # Margin Y = (16-8)/2 = 4 (relative to 16) -> 4/16 = 0.25
+                            
+                            ratio_w = 120 / 128
+                            ratio_h = 8 / 16
+                            
+                            fill_max_w = int(bar_w * ratio_w)
+                            fill_h = int(bar_h * ratio_h)
+                            
+                            offset_x = (bar_w - fill_max_w) // 2
+                            offset_y = (bar_h - fill_h) // 2
+                            
+                            current_fill_w = int(fill_max_w * progress)
+                            
+                            if current_fill_w > 0:
+                                fill_scaled = pygame.transform.scale(self.bar_fill_image, (current_fill_w, fill_h))
+                                screen.blit(fill_scaled, (bar_rect.x + offset_x, bar_rect.y + offset_y))
+                        else:
+                            pygame.draw.rect(screen, BLACK, bar_rect)
+                            pygame.draw.rect(screen, BLUE, (bar_rect.x, bar_rect.y, bar_rect.width * progress, bar_h))
+                            pygame.draw.rect(screen, WHITE, bar_rect, 2)
             
             self.btn_close_crafting.draw(screen)
 
@@ -433,7 +527,7 @@ class RoomState(GameState):
             self.draw_ui_background(screen, rect)
              
             title = self.title_font.render("Research Center", True, WHITE)
-            screen.blit(title, (rect.centerx - title.get_width()//2, rect.y + 10))
+            screen.blit(title, (rect.centerx - title.get_width()//2, rect.y + 30))
              
             # Research Buttons
             for i, btn in enumerate(self.research_buttons):
@@ -443,21 +537,49 @@ class RoomState(GameState):
                     topic = topic_keys[i]
                     if topic == self.selected_research:
                         if self.research_highlight_image:
-                            # Scale to button size
-                            highlight_scaled = pygame.transform.scale(self.research_highlight_image, (btn.rect.width, btn.rect.height))
-                            screen.blit(highlight_scaled, btn.rect)
+                            screen.blit(self.research_highlight_image, btn.rect)
                         else:
                             pygame.draw.rect(screen, YELLOW, btn.rect, 2)
                        
-                    # Status
+                    # Status - Only 'Done' marks specific buttons
                     if topic in self.research_system.completed_research:
                         status_text = self.font.render("Done", True, GREEN)
                         screen.blit(status_text, (btn.rect.right + 10, btn.rect.centery - 10))
-                    elif self.research_system.current_research == topic:
-                        status_text = self.font.render("Res...", True, YELLOW)
-                        screen.blit(status_text, (btn.rect.right + 10, btn.rect.centery - 10))
-                            
-            # Start Button
-            self.btn_start_research.rect.topleft = (rect.centerx - 60, rect.bottom - 50)
-            self.btn_start_research.draw(screen)
+                        
+            if self.research_system.current_research:
+                 res_text = self.font.render(f"Researching: {self.research_system.current_research}...", True, YELLOW)
+                 screen.blit(res_text, (self.research_ui_rect.centerx - res_text.get_width()//2, self.research_ui_rect.bottom - 110))
+                 
+                 # Research Progress Bar (Similar to Crafting)
+                 progress = self.research_system.get_progress()
+                 bar_w = 200
+                 bar_h = 24
+                 bar_x = self.research_ui_rect.centerx - (bar_w // 2)
+                 bar_y = self.research_ui_rect.bottom - 90
+                 bar_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
+                 
+                 if getattr(self, 'bar_bg_image', None) and getattr(self, 'bar_fill_image', None):
+                     bg_scaled = pygame.transform.scale(self.bar_bg_image, (bar_w, bar_h))
+                     screen.blit(bg_scaled, bar_rect)
+                     
+                     # Ratio Calcs
+                     ratio_w = 120 / 128
+                     ratio_h = 8 / 16
+                     fill_max_w = int(bar_w * ratio_w)
+                     fill_h = int(bar_h * ratio_h)
+                     offset_x = (bar_w - fill_max_w) // 2
+                     offset_y = (bar_h - fill_h) // 2
+                     
+                     current_fill_w = int(fill_max_w * progress)
+                     if current_fill_w > 0:
+                         fill_scaled = pygame.transform.scale(self.bar_fill_image, (current_fill_w, fill_h))
+                         screen.blit(fill_scaled, (bar_rect.x + offset_x, bar_rect.y + offset_y))
+                 else:
+                     pygame.draw.rect(screen, BLACK, bar_rect)
+                     pygame.draw.rect(screen, BLUE, (bar_rect.x, bar_rect.y, bar_rect.width * progress, bar_h))
+                     pygame.draw.rect(screen, WHITE, bar_rect, 2)
+            else:        
+                # Start Button (Only show if NOT researching)
+                self.btn_start_research.rect.topleft = (rect.centerx - 60, rect.bottom - 80)
+                self.btn_start_research.draw(screen)
             self.btn_close_research.draw(screen)

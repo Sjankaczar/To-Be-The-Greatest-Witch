@@ -27,7 +27,7 @@ SND_PICKUP = os.path.join(base_dir, "assets", "sounds", "sfx", "Pickup.wav")
 SND_DEATH = os.path.join(base_dir, "assets", "sounds", "sfx", "det.wav")
 IMG_SLIME = os.path.join(base_dir, "assets", "Slime2_Walk_full.png")
 IMG_SLIME_3 = os.path.join(base_dir, "assets", "Slime3_Walk_full.png")
-IMG_FAIRY = os.path.join(base_dir, "assets", "fairy_spritesheet.png")
+IMG_FAIRY = os.path.join(base_dir, "assets", "fairy.png")
 
 
 class ExplorationState(GameState):

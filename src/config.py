@@ -9,7 +9,7 @@ TILE_SIZE = 32
 CAMERA_ZOOM = 2.7 
 
 # Game Settings
-SHOW_OPENING_SCREEN = False
+SHOW_OPENING_SCREEN = True
 
 # Colors
 WHITE = (255, 255, 255)
@@ -53,7 +53,7 @@ PRICES = {
 
 # Farming Settings
 CROP_GROWTH_TIME = 600 # Frames (10 seconds)
-FAIRY_SPAWN_CHANCE = 0.1 # 0.1% chance per frame
+FAIRY_SPAWN_CHANCE = 0.01 # 1% chance per frame
 FAIRY_RESEARCH_BOOST = 0.1 # 10% speed boost per fairy
 INSECT_SPAWN_CHANCE = 0.005 # 0.5% chance per frame
 AXE_DURABILITY = 3

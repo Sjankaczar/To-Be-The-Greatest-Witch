@@ -10,7 +10,7 @@ from src.systems.farming import FarmingSystem
 from src.utils.ui import Button
 from src.utils.ui import Button
 from src.utils.camera import Camera
-from src.entities.golem import Golem
+
 from src.utils.bitmap_font import BitmapFont
 from pytmx.util_pygame import load_pygame
 from src.utils.bitmap_font import BitmapFont
@@ -28,7 +28,9 @@ class HomeState(GameState):
         super().__init__(game)
         self.crafting_system = CraftingSystem()
         self.shop_system = ShopSystem()
-        self.research_system = ResearchSystem()
+        self.shop_system = ShopSystem()
+        self.research_system = game.research_system # Use shared system
+        self.farming_system = FarmingSystem()
         self.farming_system = FarmingSystem()
         self.font = pygame.font.SysFont(None, 24)
         self.title_font = pygame.font.SysFont(None, 48)
@@ -58,7 +60,7 @@ class HomeState(GameState):
         self.camera = Camera(self.map_width, self.map_height, self.virtual_width, self.virtual_height, min_offset_y=-16)
         
         # Golems
-        self.golems = pygame.sprite.Group()
+
         self.expansion_queue = [] # List of (grid_x, grid_y)
         self.command_mode = False
         
@@ -128,7 +130,7 @@ class HomeState(GameState):
         self.crafting_tab = "Potions"
         self.btn_tab_potions = Button(0, 0, 80, 30, "Potions", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
         self.btn_tab_seeds = Button(0, 0, 80, 30, "Seeds", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
-        self.btn_tab_golems = Button(0, 0, 80, 30, "Golems", self.font, color=BLUE, text_color=WHITE, image=self.button_image)
+
         
         self.recipe_buttons = []
         self.update_recipe_list()
@@ -190,6 +192,16 @@ class HomeState(GameState):
         # Settings UI
         self.show_settings = False
         self.settings_btn_image = None
+        # Load UI Images
+        if os.path.exists(IMG_HIGHLIGHT_SLOT):
+             self.raw_highlight = pygame.image.load(IMG_HIGHLIGHT_SLOT).convert_alpha()
+             # Pre-generate highlight for Research (200px)
+             self.research_highlight_image = self.create_3_slice_highlight(self.raw_highlight, 200, 30)
+             # Pre-generate for Shop Tabs (100px - matching button width)
+             self.shop_tab_highlight_image = self.create_3_slice_highlight(self.raw_highlight, 100, 30)
+        else:
+             self.research_highlight_image = None
+             self.shop_tab_highlight_image = None
         if os.path.exists(IMG_SETTINGS_BTN):
              self.settings_btn_image = pygame.image.load(IMG_SETTINGS_BTN).convert_alpha()
              # Scale if needed
@@ -256,6 +268,16 @@ class HomeState(GameState):
         else:
             print(f"Warning: Template box not found at {IMG_TEMPLATE_BOX}")
             self.template_box_image = None
+
+        # Pre-load Tileset Image for Manual Extraction (Fallback/Primary for farmland)
+        tileset_path = os.path.join("assets", "tiles", "free_sample_tileset.png")
+        self.manual_tileset_image = None
+        if os.path.exists(tileset_path):
+             try:
+                 self.manual_tileset_image = pygame.image.load(tileset_path).convert_alpha()
+                 print(f"Loaded manual tileset: {tileset_path}")
+             except Exception as e:
+                 print(f"Error loading manual tileset: {e}")
             
         # UI Box Constants (Verified via script)
         self.box_orig_w = 90
@@ -272,6 +294,7 @@ class HomeState(GameState):
 
     def create_3_slice_highlight(self, raw_img, target_w, target_h):
         # 1. Scale uniformly to target height to establish correct border thickness
+        # This assumes the visual "height" of the border should roughly equal the button height
         base_surf = pygame.transform.scale(raw_img, (target_h, target_h))
         
         # 2. Slice
@@ -293,7 +316,7 @@ class HomeState(GameState):
         
         return final_surf
 
-    def enter(self):
+    def enter(self, params=None):
         print("Entering Home State")
         # Always force player to start at specific position
         self.game.player.rect.topleft = (90, 165)
@@ -746,6 +769,7 @@ class HomeState(GameState):
                     
                     if selected_item:
                         item_name = selected_item['name']
+                        print(f"DEBUG: Clicked with item '{item_name}' at world pos ({world_x:.2f}, {world_y:.2f})")
                         
                         # Axe Logic (Can be used outside map)
                         if item_name == "Axe":
@@ -789,33 +813,39 @@ class HomeState(GameState):
                             elif item_name in ["Red Herb", "Blue Herb", "Rare Herb", "Red Seed", "Blue Seed", "Rare Seed"]:
                                 # Check research requirement
                                 can_plant = False
-                                if item_name in ["Red Herb", "Blue Herb", "Red Seed", "Blue Seed"] and "Herbology" in self.research_system.completed_research:
+                                if item_name in ["Red Herb", "Blue Herb", "Red Seed", "Blue Seed"]:
+                                    # Basic herbs/seeds no longer require research
                                     can_plant = True
                                 elif item_name in ["Rare Herb", "Rare Seed"] and "Rare Herbs" in self.research_system.completed_research:
                                     can_plant = True
-                                    
+                                
+                                else:
+                                     print(f"Research check failed for {item_name}. Completed: {self.research_system.completed_research}")
+
                                 if can_plant:
+                                    print(f"Attempting to plant {item_name} at ({world_x:.2f}, {world_y:.2f})")
                                     if self.farming_system.plant_crop(world_x, world_y, item_name): 
                                         selected_item['count'] -= 1
                                         if selected_item['count'] <= 0:
                                             self.game.player.toolbar[selected_slot_index] = None
                                         
                                         key = self.farming_system.get_tile_key(world_x, world_y)
+                                        print(f"Plant success at key {key}")
                                         if key in self.farming_system.grid and self.farming_system.grid[key]['type'] == 'farmland' and self.farming_system.grid[key]['crop'] is None:
                                             self.farming_system.grid[key]['crop'] = item_name
                                             self.farming_system.grid[key]['growth'] = 0
                                             print(f"Planted {item_name}!")
+                                    else:
+                                        print(f"plant_crop returned False. Grid Key: {self.farming_system.get_tile_key(world_x, world_y)}")
+                                        key = self.farming_system.get_tile_key(world_x, world_y)
+                                        if key in self.farming_system.grid:
+                                             print(f"Tile Data: {self.farming_system.grid[key]}")
+                                        else:
+                                             print("Key not in grid.")
                                 else:
                                     print("Cannot plant: Research required.")
                             
-                            elif item_name == "Wood Golem":
-                                # Spawn Golem
-                                golem = Golem(world_x, world_y, self)
-                                self.golems.add(golem)
-                                selected_item['count'] -= 1
-                                if selected_item['count'] <= 0:
-                                    self.game.player.toolbar[selected_slot_index] = None
-                                print("Spawned Wood Golem!")
+
 
     def update(self):
         # Crafting Logic
@@ -834,8 +864,7 @@ class HomeState(GameState):
         # Farming Logic
         self.farming_system.update()
         
-        # Golem Logic
-        self.golems.update()
+
         
         # Update Player (Movement & Animation)
         # Update Player (Movement & Animation)
@@ -848,7 +877,7 @@ class HomeState(GameState):
             
             # Check for Room Teleport (Specific Coordinates)
             px, py = self.game.player.rect.topleft
-            if (px == 90 or px == 91) and (py == 119 or py == 120):
+            if (px==88 or px==89 or px == 90 or px == 91 or px == 92 or px==93 or px==94) and (py == 119 or py == 120 or py == 121 or py == 122):
                 print(f"Teleporting to Room from {px},{py}")
                 self.game.states["room"].enter()
                 self.game.change_state("room")
@@ -1100,11 +1129,160 @@ class HomeState(GameState):
                     rect = pygame.Rect(world_x, world_y, self.farming_system.tile_size, self.farming_system.tile_size)
                     
                     if tile['type'] == 'farmland':
-                        color = BROWN
-                        if tile['watered']:
-                            color = (100, 50, 0) # Darker brown if watered
-                        pygame.draw.rect(screen, color, self.camera.apply_rect(rect))
-                        pygame.draw.rect(screen, BLACK, self.camera.apply_rect(rect), 1) # Grid lines
+                        # 9-Slice Autotiling Logic
+                        # IDs based on GID 1308 (Top-Left) and Columns 70
+                        # TL=1308, T=1309, TR=1310
+                        # L=1378,  C=1379, R=1380
+                        # BL=1448, B=1449, BR=1450
+                        
+                        # Check Neighbors
+                        n = (grid_x, grid_y - 1) in self.farming_system.grid and self.farming_system.grid[(grid_x, grid_y - 1)]['type'] == 'farmland'
+                        s = (grid_x, grid_y + 1) in self.farming_system.grid and self.farming_system.grid[(grid_x, grid_y + 1)]['type'] == 'farmland'
+                        w = (grid_x - 1, grid_y) in self.farming_system.grid and self.farming_system.grid[(grid_x - 1, grid_y)]['type'] == 'farmland'
+                        e = (grid_x + 1, grid_y) in self.farming_system.grid and self.farming_system.grid[(grid_x + 1, grid_y)]['type'] == 'farmland'
+                        
+                        # Bitmask: N=1, S=2, W=4, E=8
+                        mask = 0
+                        if n: mask += 1
+                        if s: mask += 2
+                        if w: mask += 4
+                        if e: mask += 8
+                        
+                        # GID Mapping (Base 1308)
+                        # 4x4 Grid Structure assumed:
+                        # Row 0: 1308(TL), 1309(T), 1310(TR), 1311(V-Top)
+                        # Row 1: 1378(L),  1379(C), 1380(R),  1381(V-Mid)
+                        # Row 2: 1448(BL), 1449(B), 1450(BR), 1451(V-Bot)
+                        # Row 3: 1518(H-L), 1519(H-M), 1520(H-R), 1521(Iso)
+                        
+                        gid_map = {
+                            0: 1521,  # None -> Isolated
+                            
+                            # Horizontal Strip (No N/S)
+                            8: 1518,  # E -> H-Left
+                            4: 1520,  # W -> H-Right
+                            12: 1519, # W+E -> H-Mid
+                            
+                            # Vertical Strip (No W/E)
+                            2: 1311,  # S -> V-Top
+                            1: 1451,  # N -> V-Bottom
+                            3: 1381,  # N+S -> V-Mid
+                            
+                            # 3x3 Block Context
+                            10: 1308, # N=0, S=1, W=0, E=1 -> TL (S+E)
+                            6: 1310,  # N=0, S=1, W=1, E=0 -> TR (S+W)
+                            9: 1448,  # N=1, S=0, W=0, E=1 -> BL (N+E)
+                            5: 1450,  # N=1, S=0, W=1, E=0 -> BR (N+W)
+                            
+                            14: 1378, # N=1, S=1, W=0, E=1 -> L (N+S+E)
+                            7: 1380,  # N=0, S=1, W=1, E=1 -> R (S+W+E) ? No. R needs N+S+W. 
+                                      # Wait. Edge 'Left' means neighbors on N, S, E.
+                                      # Edge 'Right' means neighbors on N, S, W.
+                                      # Let's re-verify:
+                                      # Left Edge (1378) visually matches 'Left Border'. So it should be used when there IS stuff to the right, but NOT to the left.
+                                      # Neighbors: N, S, E. (Mask 1+2+8=11)
+                                      
+                            11: 1378, # N+S+E -> Left Edge (Visual Left border)
+                            13: 1380, # N=1, S=1, W=1 -> N+S+W -> Right Edge (Visual Right border)
+                            
+                            15: 1379, # All -> Center
+                            
+                            # T-Junctions (Missing one side) or 2-side corners
+                            # Top Edge (1309): Needs S, W, E. (No N). Mask 2+4+8=14
+                            14: 1309, 
+                            
+                            # Bottom Edge (1449): Needs N, W, E. (No S). Mask 1+4+8=13. No wait.
+                            # Standard 3x3 logic usually:
+                            # 1309 (Top Edge) -> Used when: Has S. Has W? Has E?
+                            # Actually, a simple 'Hull' logic might be safer than explicit mask if combinations are weird.
+                            # But strict mask is best for strips.
+                            
+                            # Let's fix the 3x3 mapping based on "Connects to":
+                            # TL (1308) connects S and E.
+                            # T (1309) connects S, W, E.
+                            # TR (1310) connects S, W.
+                            # L (1378) connects N, S, E.
+                            # C (1379) connects N, S, W, E.
+                            # R (1380) connects N, S, W.
+                            # BL (1448) connects N, E.
+                            # B (1449) connects N, W, E.
+                            # BR (1450) connects N, W.
+                            
+                            # Re-evaluating masks:
+                            # S+E (2+8=10) -> TL (1308)
+                            # S+W+E (2+4+8=14) -> T (1309)
+                            # S+W (2+4=6) -> TR (1310)
+                            # N+S+E (1+2+8=11) -> L (1378)
+                            # N+S+W+E (15) -> C (1379)
+                            # N+S+W (1+2+4=7) -> R (1380)
+                            # N+E (1+8=9) -> BL (1448)
+                            # N+W+E (1+4+8=13) -> B (1449)
+                            # N+W (1+4=5) -> BR (1450)
+                        }
+                        
+                        gid = gid_map.get(mask, 1379) # Default to center if unknown combo (should cover all though)
+                        
+                        # Special case: Isolation override is 1521 (Mask 0)
+                        # Horizontal strip override:
+                        # If N=0 and S=0:
+                        #   W=0, E=0 -> 1521
+                        #   W=0, E=1 -> 1518
+                        #   W=1, E=1 -> 1519
+                        #   W=1, E=0 -> 1520
+                        # Vertical strip override:
+                        # If W=0 and E=0:
+                        #   N=0, S=1 -> 1311
+                        #   N=1, S=1 -> 1381
+                        #   N=1, S=0 -> 1451
+                        
+                        # The map above covers these exactly!
+                        # 0 -> 1521
+                        # 8 -> 1518
+                        # 4 -> 1520
+                        # 12 -> 1519
+                        # 2 -> 1311
+                        # 1 -> 1451
+                         # 3 -> 1381
+                         
+                        # What if we have weird shapes? e.g. N only (1)? Mapped to 1451. Correct.
+                        # What if N and E? (9). Mapped to 1448 (BL). Correct.
+                        # It seems consistent.
+                        
+                        # Get Tile Image
+                        tile_img = None
+                        
+                        # Try Manual Extraction first (Reliable based on view_tile_id.py)
+                        if self.manual_tileset_image:
+                             try:
+                                 # GID 1-based, index 0-based
+                                 # Assuming GID matches raw index + 1 for this tileset (firstgid=1)
+                                 # GID 1308 -> Index 1307
+                                 idx = gid - 1 
+                                 cols = 70 # Hardcoded as per halaman.tmx
+                                 row = idx // cols
+                                 col = idx % cols
+                                 
+                                 x = col * 16 # Tile Size 16
+                                 y = row * 16
+                                 
+                                 if x + 16 <= self.manual_tileset_image.get_width() and y + 16 <= self.manual_tileset_image.get_height():
+                                      tile_img = self.manual_tileset_image.subsurface(pygame.Rect(x, y, 16, 16))
+                             except Exception as e:
+                                 print(f"Manual tile extract error: {e}")
+
+                        # Fallback to pytmx if manual failed (or if tileset mismatch)
+                        if not tile_img:
+                             try:
+                                 tile_img = self.tmx_data.get_tile_image_by_gid(gid)
+                             except Exception:
+                                 pass
+
+                        if tile_img:
+                             screen.blit(tile_img, self.camera.apply_rect(rect))
+                        else:
+                             # Fallback if image not found
+                             pygame.draw.rect(screen, BROWN, self.camera.apply_rect(rect))
+                             pygame.draw.rect(screen, BLACK, self.camera.apply_rect(rect), 1)
                         
                         if tile['crop']:
                             # Draw Crop
@@ -1142,20 +1320,14 @@ class HomeState(GameState):
                  # portal_text = self.font.render("Portal", True, WHITE)
                  # screen.blit(portal_text, (self.portal_rect.centerx - 20 + self.camera.camera.x, self.portal_rect.centery - 10 + self.camera.camera.y))
                  
-                 # Crafting
-                 pygame.draw.rect(screen, (139, 69, 19), self.camera.apply_rect(self.crafting_rect)) # Brown
-                 craft_text = self.font.render("Crafting", True, WHITE)
-                 screen.blit(craft_text, (self.crafting_rect.centerx - 30 + self.camera.camera.x, self.crafting_rect.centery - 10 + self.camera.camera.y))
+
                  
                  # Shop - Hidden/Transparent as per request
                  # pygame.draw.rect(screen, (218, 165, 32), self.camera.apply_rect(self.shop_rect)) # Goldenrod
                  # shop_text = self.font.render("Shop", True, WHITE)
                  # screen.blit(shop_text, (self.shop_rect.centerx - 20 + self.camera.camera.x, self.shop_rect.centery - 10 + self.camera.camera.y))
                  
-                 # Research
-                 pygame.draw.rect(screen, (70, 130, 180), self.camera.apply_rect(self.research_rect)) # Steel Blue
-                 res_text = self.font.render("Research", True, WHITE)
-                 screen.blit(res_text, (self.research_rect.centerx - 30 + self.camera.camera.x, self.research_rect.centery - 10 + self.camera.camera.y))
+
                  
                  # Draw Player (World Space)
                  if hasattr(self.game.player, 'image'):
@@ -1163,9 +1335,7 @@ class HomeState(GameState):
                  else:
                      pygame.draw.rect(screen, BLUE, self.camera.apply_rect(self.game.player.rect))
                      
-                 # Draw Golems
-                 for golem in self.golems:
-                     screen.blit(golem.image, self.camera.apply_rect(golem.rect))
+
                      
                  # Draw Expansion Queue (Ghost Tiles)
                  for tile_pos in self.expansion_queue:
@@ -1235,8 +1405,8 @@ class HomeState(GameState):
         # --- UI LAYER (Screen Space) ---
         
         # Draw UI Title
-        title = self.title_font.render("Home Sweet Home", True, WHITE)
-        screen.blit(title, (SCREEN_WIDTH // 2 - 150, 30))
+        # title = self.title_font.render("Home Sweet Home", True, WHITE)
+        # screen.blit(title, (SCREEN_WIDTH // 2 - 150, 30))
         
         # Draw Stats UI (Left of Toolbar)
         stats_x = 20
@@ -1537,9 +1707,15 @@ class HomeState(GameState):
                 
                 # Highlight Active Tab
                 if self.shop_tab == "buy":
-                    pygame.draw.rect(screen, YELLOW, self.btn_shop_buy_tab.rect, 2)
+                    if getattr(self, 'shop_tab_highlight_image', None):
+                        screen.blit(self.shop_tab_highlight_image, self.btn_shop_buy_tab.rect)
+                    else:
+                        pygame.draw.rect(screen, YELLOW, self.btn_shop_buy_tab.rect, 2)
                 else:
-                    pygame.draw.rect(screen, YELLOW, self.btn_shop_sell_tab.rect, 2)
+                    if getattr(self, 'shop_tab_highlight_image', None):
+                        screen.blit(self.shop_tab_highlight_image, self.btn_shop_sell_tab.rect)
+                    else:
+                        pygame.draw.rect(screen, YELLOW, self.btn_shop_sell_tab.rect, 2)
                     
                 # Draw List (Clipped)
                 list_rect = pygame.Rect(rect.x + 20, rect.y + 80, rect.width - 40, 250)
@@ -1604,7 +1780,7 @@ class HomeState(GameState):
                             self.btn_shop_action.draw(screen)
                         else:
                             lock_text = self.font.render(f"Unlocked at Rank {req_rank}", True, RED)
-                            screen.blit(lock_text, (rect.centerx - lock_text.get_width()//2, 410)) # Adjust Y as needed
+                            screen.blit(lock_text, (rect.centerx - lock_text.get_width()//2, 450)) # Adjust Y as needed
                     else:
                         self.btn_shop_action.draw(screen)
                     
@@ -1833,5 +2009,6 @@ class HomeState(GameState):
                         print(f"Error drawing highlight: {e}")
 
         # Draw Player Coordinates (Top-Left)
-        player_pos_text = self.font.render(f"Pos: ({self.game.player.rect.x}, {self.game.player.rect.y})", True, WHITE)
-        screen.blit(player_pos_text, (10, 10))
+        # Draw Player Coordinates (Top-Left)
+        # player_pos_text = self.font.render(f"Pos: ({self.game.player.rect.x}, {self.game.player.rect.y})", True, WHITE)
+        # screen.blit(player_pos_text, (10, 10))

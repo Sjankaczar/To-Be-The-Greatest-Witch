@@ -60,8 +60,8 @@ class OpeningState(GameState):
         if self.play_img:
             btn_w, btn_h = self.play_img.get_size()
             
-        center_x = (SCREEN_WIDTH - btn_w) // 2
-        play_y = SCREEN_HEIGHT // 2 + 50
+        center_x = ((SCREEN_WIDTH - btn_w) // 2) - 215
+        play_y = SCREEN_HEIGHT // 2 - 50
         exit_y = play_y + btn_h + 20
         
         self.btn_play = Button(center_x, play_y, btn_w, btn_h, "", self.font, image=self.play_img)

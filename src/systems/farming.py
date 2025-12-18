@@ -4,7 +4,7 @@ from src.config import *
 class FarmingSystem:
     def __init__(self):
         self.grid = {} # (x, y): {'type': 'grass'|'farmland', 'crop': None|'Red Herb'|..., 'growth': 0, 'watered': False}
-        self.tile_size = 32
+        self.tile_size = 16
         
     def get_tile_key(self, x, y):
         # Convert world coordinates to grid coordinates

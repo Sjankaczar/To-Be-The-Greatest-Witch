@@ -1,5 +1,6 @@
 import pygame
 from src.config import *
+from src.assets import *
 
 import os
 
@@ -14,7 +15,16 @@ class Item(pygame.sprite.Sprite):
         self.image = pygame.Surface((32, 32))
         image_found = False
         
-        if os.path.exists(sheet_path):
+        if name == "Water" and os.path.exists(IMG_WATER_BOTTLE):
+             try:
+                 img = pygame.image.load(IMG_WATER_BOTTLE).convert_alpha()
+                 # Scale to smaller size (20x20) as per user request to reduce size and hitbox
+                 self.image = pygame.transform.scale(img, (20, 20))
+                 image_found = True
+             except Exception as e:
+                 print(f"Error loading water sprite: {e}")
+                 
+        if not image_found and os.path.exists(sheet_path):
             try:
                 sheet = pygame.image.load(sheet_path).convert_alpha()
                 
