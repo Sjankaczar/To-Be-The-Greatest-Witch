@@ -9,7 +9,7 @@ TILE_SIZE = 32
 CAMERA_ZOOM = 2.7 
 
 # Game Settings
-SHOW_OPENING_SCREEN = True
+SHOW_OPENING_SCREEN = False
 
 # Colors
 WHITE = (255, 255, 255)
@@ -30,7 +30,7 @@ DARK_GREEN_BG = (20, 50, 20) # Very dark green for exploration
 # ZOOM_LEVEL = 2.0 # Removed redundant
 TELEPORT_COOLDOWN = 5 # Seconds
 LANTERN_RADIUS = 75
-LANTERN_MAX_ALPHA = 200
+LANTERN_MAX_ALPHA = 255
 
 # Shop Prices
 PRICES = {
@@ -53,7 +53,7 @@ PRICES = {
 
 # Farming Settings
 CROP_GROWTH_TIME = 600 # Frames (10 seconds)
-FAIRY_SPAWN_CHANCE = 0.001 # 0.1% chance per frame
+FAIRY_SPAWN_CHANCE = 0.1 # 0.1% chance per frame
 FAIRY_RESEARCH_BOOST = 0.1 # 10% speed boost per fairy
 INSECT_SPAWN_CHANCE = 0.005 # 0.5% chance per frame
 AXE_DURABILITY = 3
@@ -96,3 +96,10 @@ RANK_INTEL_CAPS = {
     3: 90
     # Rank 4+ has dynamic cap (equal to current)
 }
+
+# Toolbar Settings
+TOOLBAR_SLOT_SIZE = 40 # Base size of the slot box (was ~32-40)
+TOOLBAR_SPACING = 7   # Gap between slots
+TOOLBAR_Y_OFFSET = 60  # Pixels from bottom
+TOOLBAR_X_SHIFT = -40  # Manual Left/Right shift (Negative = Left)
+TOOLBAR_ITEM_SCALE = 0.64 # Item size relative to slot size (e.g. 80%)

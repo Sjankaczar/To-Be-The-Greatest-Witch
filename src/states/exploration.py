@@ -1,6 +1,7 @@
 from src.states.game_state import GameState
 from src.entities.player import Player
 from src.entities.forest_creature import ForestCreature
+from src.entities.chasing_creature import ChasingCreature
 from src.entities.item import Item
 from src.entities.fairy import Fairy
 from src.config import *
@@ -13,12 +14,20 @@ from src.utils.camera import Camera
 from src.utils.ui import Button
 import math
 import os
-from src.assets import IMG_HOME_ICON, IMG_HOTKEY_BOX, IMG_HIGHLIGHT_SLOT, IMG_SLIDER, IMG_VALUE_BAR, IMG_VALUE_BLUE, IMG_TEMPLATE_BOX
+from src.assets import IMG_HOME_ICON, IMG_HOTKEY_BOX, IMG_HIGHLIGHT_SLOT, IMG_SLIDER, IMG_VALUE_BAR, IMG_VALUE_BLUE, IMG_TEMPLATE_BOX, MAP_FOREST
+from pytmx.util_pygame import load_pygame
 
 # Local Asset
 base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 IMG_HP_BAR = os.path.join(base_dir, "UI The Greatest Witch", "ValueBar_128x16.png")
-IMG_SETTINGS_BTN = os.path.join(base_dir, "UI The Greatest Witch", "settings_button.png")
+# Local Asset Path for Settings
+IMG_SETTINGS_BTN = os.path.join(base_dir, "UI The Greatest Witch", "settings_UI.png")
+IMG_SLIDER_KNOB = os.path.join(base_dir, "UI The Greatest Witch", "CornerKnot_14x14.png")
+SND_PICKUP = os.path.join(base_dir, "assets", "sounds", "sfx", "Pickup.wav")
+SND_DEATH = os.path.join(base_dir, "assets", "sounds", "sfx", "det.wav")
+IMG_SLIME = os.path.join(base_dir, "assets", "Slime2_Walk_full.png")
+IMG_SLIME_3 = os.path.join(base_dir, "assets", "Slime3_Walk_full.png")
+IMG_FAIRY = os.path.join(base_dir, "assets", "fairy_spritesheet.png")
 
 
 class ExplorationState(GameState):
@@ -29,6 +38,9 @@ class ExplorationState(GameState):
         self.fairies = pygame.sprite.Group()
         self.insects = pygame.sprite.Group()
         self.font = pygame.font.SysFont(None, 24)
+        
+        # Cache for Item Sprites
+        self.item_images = {}
         
         # Load HP Bar
         self.hp_bar_image = None
@@ -46,19 +58,19 @@ class ExplorationState(GameState):
         self.settings_btn_image = None
         if os.path.exists(IMG_SETTINGS_BTN):
              self.settings_btn_image = pygame.image.load(IMG_SETTINGS_BTN).convert_alpha()
-             self.settings_btn_image = pygame.transform.scale(self.settings_btn_image, (32, 32))
+             self.settings_btn_image = pygame.transform.scale(self.settings_btn_image, (80, 80))
         else:
              print(f"Warning: Settings Btn not found at {IMG_SETTINGS_BTN}")
              
-        self.btn_settings = Button(0, 0, 32, 32, "", self.font, color=GRAY, image=self.settings_btn_image)
+        self.btn_settings = Button(0, 0, 80, 80, "", self.font, color=GRAY, image=self.settings_btn_image)
         # Position it above the HP bar? Or Top Right?
         # Home uses stats_x, stats_y - 42.
         # Exploration HP Bar is at 20, 20.
         # Let's put Settings button at Top Right to avoid cluttering HP bar area, or maybe below HP bar?
         # User didn't specify position, but consistency is key.
         # In Home, it's near stats. Here we don't have stats.
-        # Let's put it Top RightCorner for now: SCREEN_WIDTH - 50, 20
-        self.btn_settings.rect.topleft = (SCREEN_WIDTH - 50, 20)
+        # Let's put it Top RightCorner for now: SCREEN_WIDTH - 100, 20
+        self.btn_settings.rect.topleft = (SCREEN_WIDTH - 100, 20)
         
         # Volume Assets
         self.slider_image = None
@@ -73,13 +85,18 @@ class ExplorationState(GameState):
         if os.path.exists(IMG_VALUE_BLUE):
              self.value_blue_image = pygame.image.load(IMG_VALUE_BLUE).convert_alpha()
              
-        self.template_box_image = None
         if os.path.exists(IMG_TEMPLATE_BOX):
              self.template_box_image = pygame.image.load(IMG_TEMPLATE_BOX).convert_alpha()
+             
+        self.slider_knob_image = None
+        if os.path.exists(IMG_SLIDER_KNOB):
+             self.slider_knob_image = pygame.image.load(IMG_SLIDER_KNOB).convert_alpha()
+             self.slider_knob_image = pygame.transform.scale(self.slider_knob_image, (28, 28))
         
-        # Infinite Map Settings (Virtual Size for Camera)
-        self.map_width = 2000 # Arbitrary large size for now
-        self.map_height = 2000
+        # Map Loading (Forest TMX)
+        self.tmx_data = load_pygame(MAP_FOREST)
+        self.map_width = self.tmx_data.width * self.tmx_data.tilewidth
+        self.map_height = self.tmx_data.height * self.tmx_data.tileheight
         
         # Zoom Settings
         self.zoom = CAMERA_ZOOM
@@ -94,10 +111,10 @@ class ExplorationState(GameState):
         # Display Surface for Zooming
         self.display_surface = pygame.Surface((self.viewport_width, self.viewport_height))
         
-        # Grid Background
+        # Grid Background (Obsolete with map, but good fallback)
         self.grid_surface = pygame.Surface((self.viewport_width, self.viewport_height)) 
         self.grid_surface.fill(DARK_GREEN_BG)
-        self.draw_grid()
+        # self.draw_grid()
 
         # Load Home Icon
         if os.path.exists(IMG_HOME_ICON):
@@ -126,10 +143,60 @@ class ExplorationState(GameState):
         else:
              print(f"Warning: HighlightSlot not found at {IMG_HIGHLIGHT_SLOT}")
 
+        # Load Sounds
+        self.pickup_sound = None
+        if os.path.exists(SND_PICKUP):
+             self.pickup_sound = pygame.mixer.Sound(SND_PICKUP)
+        else:
+             print(f"Warning: Pickup Sound not found at {SND_PICKUP}")
+
+        self.death_sound = None
+        if os.path.exists(SND_DEATH):
+             self.death_sound = pygame.mixer.Sound(SND_DEATH)
+        else:
+             print(f"Warning: Death Sound not found at {SND_DEATH}")
+
+        self.slime_image = None
+        if os.path.exists(IMG_SLIME):
+             self.slime_image = pygame.image.load(IMG_SLIME).convert_alpha()
+        else:
+             print(f"Warning: Slime Image not found at {IMG_SLIME}")
+
+        self.slime3_image = None
+        if os.path.exists(IMG_SLIME_3):
+             self.slime3_image = pygame.image.load(IMG_SLIME_3).convert_alpha()
+        else:
+             print(f"Warning: Slime3 Image not found at {IMG_SLIME_3}")
+             
+        if os.path.exists(IMG_FAIRY):
+             self.fairy_image = pygame.image.load(IMG_FAIRY).convert_alpha()
+        else:
+             print(f"Warning: Fairy Image not found at {IMG_FAIRY}")
+
+        # Load Butterfly Image
+        self.butterfly_image = None
+        from src.assets import IMG_BUTTERFLY
+        if os.path.exists(IMG_BUTTERFLY):
+             self.butterfly_image = pygame.image.load(IMG_BUTTERFLY).convert_alpha()
+        else:
+             print(f"Warning: Butterfly Image not found at {IMG_BUTTERFLY}")
+
     def enter(self):
         print("Entering Exploration State")
         # Start Teleport Cooldown immediately upon entering Exploration
         self.game.player.teleport_cooldown_end = time.time() + TELEPORT_COOLDOWN
+
+    def get_item_image(self, name):
+        if name not in self.item_images:
+            try:
+                temp_item = Item(0, 0, name)
+                self.item_images[name] = temp_item.image
+            except Exception as e:
+                print(f"Error loading icon for {name}: {e}")
+                s = pygame.Surface((32, 32))
+                s.fill((128, 0, 128))
+                self.item_images[name] = s
+        return self.item_images[name]
 
     def draw_grid(self):
         # Draw static grid lines on the surface
@@ -190,6 +257,7 @@ class ExplorationState(GameState):
                      if hasattr(self, 'home_icon_rect') and self.home_icon_rect.collidepoint(event.pos):
                          current_time = time.time()
                          if current_time >= self.game.player.teleport_cooldown_end:
+                             self.game.player.rect.topleft = (90, 165)
                              self.game.states["home"].enter()
                              self.game.change_state("home")
                          else:
@@ -200,62 +268,48 @@ class ExplorationState(GameState):
                 if pygame.K_1 <= event.key <= pygame.K_9:
                      index = event.key - pygame.K_1
                      self.game.player.selected_slot = index
+                     self.game.player.selected_slot = index
                      print(f"Selected slot {index + 1}")
 
                 if event.key == pygame.K_f:
-                    # Check for portal interaction (return home)
-                    # Simplified: If near (0,0)
-                    if self.game.player.rect.colliderect(pygame.Rect(-50, -50, 100, 100)):
-                        # Check cooldown
-                        current_time = time.time()
-                        if current_time >= self.game.player.teleport_cooldown_end:
-                            self.game.states["home"].enter()
-                            self.game.change_state("home")
-
-                        else:
-                            print(f"Teleport cooling down... {self.game.player.teleport_cooldown_end - current_time:.1f}s left")
-                
-                # Teleport Home (H)
-                if event.key == pygame.K_h:
-                    # Check cooldown
-                    current_time = time.time()
-                    if current_time >= self.game.player.teleport_cooldown_end:
-                        self.game.states["home"].enter()
-                        self.game.change_state("home")
-
-                        
-                if event.key == pygame.K_f:
-                     # If not near portal, try use item
-                    if not self.game.player.rect.colliderect(pygame.Rect(-50, -50, 100, 100)):
-                         self.game.player.use_item()
+                     # Item Usage only (Portal is now automatic)
+                     self.game.player.use_item()
+                          
+                     # Check for Bug Net usage
+                     selected_slot = self.game.player.selected_slot
+                     selected_item = self.game.player.toolbar[selected_slot]
+                     if selected_item and selected_item['name'] == "Bug Net":
+                         # Check collision with insects
+                         # Create a "net" rect in front of player? Or just use player rect for simplicity
+                         # For now, use player rect + small range
+                         catch_rect = self.game.player.rect.inflate(20, 20)
+                         caught_insects = [insect for insect in self.insects if catch_rect.colliderect(insect.rect)]
                          
-                         # Check for Bug Net usage
-                         selected_slot = self.game.player.selected_slot
-                         selected_item = self.game.player.toolbar[selected_slot]
-                         if selected_item and selected_item['name'] == "Bug Net":
-                             # Check collision with insects
-                             # Create a "net" rect in front of player? Or just use player rect for simplicity
-                             # For now, use player rect + small range
-                             catch_rect = self.game.player.rect.inflate(20, 20)
-                             caught_insects = [insect for insect in self.insects if catch_rect.colliderect(insect.rect)]
-                             
-                             for insect in caught_insects:
-                                 self.insects.remove(insect)
-                                 # Add insect to inventory (Generic "Insect" item or specific?)
-                                 # For now, let's say "Beetle" or just "Insect"
-                                 # Config doesn't specify insect types yet, let's use "Beetle"
-                                 self.game.player.add_item("Beetle")
-                                 print("Caught a Beetle!")
+                         for insect in caught_insects:
+                             self.insects.remove(insect)
+                             # Add insect to inventory (Generic "Insect" item or specific?)
+                             # For now, let's say "Beetle" or just "Insect"
+                             # Config doesn't specify insect types yet, let's use "Beetle"
+                             self.game.player.add_item("Beetle")
+                             if self.pickup_sound:
+                                 self.pickup_sound.play()
+                             print("Caught a Beetle!")
 
     def update(self):
         self.game.player.update()
         self.camera.update(self.game.player)
         
+        # Portal Trigger (Automatic) - Removed as per user request (Direction reversed)
         # Spawn Enemies
-        if random.random() < 0.005: # Reduced from 0.02
+        if random.random() < 0.01: # Slightly increased spawn rate
             x = self.game.player.rect.x + random.randint(-400, 400)
             y = self.game.player.rect.y + random.randint(-300, 300)
-            enemy = ForestCreature(x, y)
+            
+            # Chance to spawn Chasing Creature
+            if random.random() < 0.3: # 30% chance for Magma Slime
+                enemy = ChasingCreature(x, y, self.slime3_image, self.game.player)
+            else:
+                enemy = ForestCreature(x, y, self.slime_image)
             self.entities.add(enemy)
             
         # Spawn Items
@@ -281,7 +335,7 @@ class ExplorationState(GameState):
         if random.random() < INSECT_SPAWN_CHANCE:
             x = self.game.player.rect.x + random.randint(-400, 400)
             y = self.game.player.rect.y + random.randint(-300, 300)
-            insect = Insect(x, y)
+            insect = Insect(x, y, self.butterfly_image)
             self.insects.add(insect)
             
         # Update Entities
@@ -291,7 +345,7 @@ class ExplorationState(GameState):
         
         # Collisions
         # Enemy
-        hits = pygame.sprite.spritecollide(self.game.player, self.entities, False)
+        hits = pygame.sprite.spritecollide(self.game.player, self.entities, False, pygame.sprite.collide_rect_ratio(0.6))
         if hits:
             current_time = time.time()
             if not hasattr(self.game.player, 'last_hit_time'):
@@ -311,12 +365,29 @@ class ExplorationState(GameState):
                         self.game.player.rect.x += (dx/dist) * 20
                         self.game.player.rect.y += (dy/dist) * 20
             
+            # Check Death
+            if self.game.player.health <= 0:
+                print("Player Died!")
+                if self.death_sound:
+                    self.death_sound.play()
+                
+                # Restore HP
+                self.game.player.health = self.game.player.max_health
+                
+                # Teleport Home
+                self.game.player.rect.topleft = (90, 165)
+                self.game.states["home"].enter()
+                self.game.change_state("home")
+                return # Stop processing update
+            
             # Knockback or damage logic here
             
         # Item Collection
         collected = pygame.sprite.spritecollide(self.game.player, self.items, True)
         for item in collected:
             self.game.player.add_item(item.name)
+            if self.pickup_sound:
+                self.pickup_sound.play()
             
         # Fairy Collection
         caught_fairies = pygame.sprite.spritecollide(self.game.player, self.fairies, True)
@@ -326,25 +397,43 @@ class ExplorationState(GameState):
 
     def draw(self, screen):
         # Draw to display_surface first (Zoomed View)
+        # Fill Background
+        self.display_surface.fill(BLACK)
         
-        # Draw Infinite Grid Background
-        # Calculate offset for grid scrolling
-        cam_x = self.camera.camera.x
-        cam_y = self.camera.camera.y
+        # --- Draw Map Layers (Bottom) ---
+        # Draw layers EXCEPT 14 and 15
+        if hasattr(self, 'tmx_data'):
+             for layer in self.tmx_data.visible_layers:
+                 # Check Layer ID (if available) or name
+                 # Pytmx layers usually have 'id' property if loaded from recent Tiled
+                 # If not, we might need to rely on name or index
+                 # User asked for "Layer 14 and 15", presumably IDs.
+                 try:
+                     layer_id = layer.id
+                 except AttributeError:
+                     # Fallback if id not found, though visible_layers usually have it
+                     layer_id = -1
+                     
+                 if layer_id in [14, 15]:
+                     continue # Draw later
+                 
+                 if hasattr(layer, 'tiles'):
+                     for x, y, gid in layer:
+                         tile = self.tmx_data.get_tile_image_by_gid(gid)
+                         if tile:
+                             target_x = x * self.tmx_data.tilewidth + self.camera.camera.x
+                             target_y = y * self.tmx_data.tileheight + self.camera.camera.y
+                             self.display_surface.blit(tile, (target_x, target_y))
         
-        # Modulo to repeat pattern
-        bg_x = cam_x % self.viewport_width
-        bg_y = cam_y % self.viewport_height
-        
-        # Draw 4 tiles to cover screen
-        self.display_surface.blit(self.grid_surface, (bg_x - self.viewport_width, bg_y - self.viewport_height))
-        self.display_surface.blit(self.grid_surface, (bg_x, bg_y - self.viewport_height))
-        self.display_surface.blit(self.grid_surface, (bg_x - self.viewport_width, bg_y))
-        self.display_surface.blit(self.grid_surface, (bg_x, bg_y))
-        
-        # Draw Portal (at 0,0)
+        else:
+             # Fallback if map not loaded
+             self.display_surface.blit(self.grid_surface, (0, 0))
+
+        # Draw Portal (at 0,0) - Only if not using map or as overlay?
+        # With forest map, maybe portal is part of map?
+        # Let's keep it for now as invisible marker or simple rect
         portal_rect = pygame.Rect(-50, -50, 100, 100)
-        pygame.draw.rect(self.display_surface, (100, 0, 100), self.camera.apply_rect(portal_rect))
+        # pygame.draw.rect(self.display_surface, (100, 0, 100), self.camera.apply_rect(portal_rect))
         
         # Draw Entities
         for entity in self.entities:
@@ -357,7 +446,6 @@ class ExplorationState(GameState):
             fairy.draw(self.display_surface, self.camera)
             
         # Draw Insects
-        # Draw Insects
         for insect in self.insects:
             self.display_surface.blit(insect.image, self.camera.apply(insect))
 
@@ -366,6 +454,24 @@ class ExplorationState(GameState):
             self.display_surface.blit(self.game.player.image, self.camera.apply(self.game.player))
         else:
             pygame.draw.rect(self.display_surface, BLUE, self.camera.apply(self.game.player))
+            
+        # --- Draw Map Layers (Top) ---
+        # Layers 14 and 15 (Foregound/Overhead)
+        if hasattr(self, 'tmx_data'):
+             for layer in self.tmx_data.visible_layers:
+                 try:
+                     layer_id = layer.id
+                 except AttributeError:
+                     layer_id = -1
+                     
+                 if layer_id in [14, 15]:
+                     if hasattr(layer, 'tiles'):
+                         for x, y, gid in layer:
+                             tile = self.tmx_data.get_tile_image_by_gid(gid)
+                             if tile:
+                                 target_x = x * self.tmx_data.tilewidth + self.camera.camera.x
+                                 target_y = y * self.tmx_data.tileheight + self.camera.camera.y
+                                 self.display_surface.blit(tile, (target_x, target_y))
             
         # --- Darkness / Lantern Effect ---
         # Create darkness surface if not exists (optimization)
@@ -445,27 +551,36 @@ class ExplorationState(GameState):
             screen.blit(hp_text, (hp_x + 5, hp_y + 2))
 
         # Toolbar
-        toolbar_start_x = (SCREEN_WIDTH - (9 * 40)) // 2
-        toolbar_y = SCREEN_HEIGHT - 50
+        # Calculate Start X based on Config
+        total_width = (9 * TOOLBAR_SLOT_SIZE) + (8 * TOOLBAR_SPACING)
+        toolbar_start_x = (SCREEN_WIDTH - total_width) // 2 + TOOLBAR_X_SHIFT
+        toolbar_y = SCREEN_HEIGHT - TOOLBAR_Y_OFFSET
         
         for i in range(9):
-            x = toolbar_start_x + i * 40
-            rect = pygame.Rect(x, toolbar_y, 32, 32)
+            x = toolbar_start_x + i * (TOOLBAR_SLOT_SIZE + TOOLBAR_SPACING)
+            rect = pygame.Rect(x, toolbar_y, TOOLBAR_SLOT_SIZE, TOOLBAR_SLOT_SIZE)
             
             # Draw Slot Background
             if self.toolbar_box_image:
-                 screen.blit(self.toolbar_box_image, (x, toolbar_y))
+                 # Scale box to new size
+                 scaled_box = pygame.transform.scale(self.toolbar_box_image, (TOOLBAR_SLOT_SIZE, TOOLBAR_SLOT_SIZE))
+                 screen.blit(scaled_box, (x, toolbar_y))
             else:
                  pygame.draw.rect(screen, BLACK, rect)
                  pygame.draw.rect(screen, WHITE, rect, 1)
 
-            # Highlight selected (Moved here to match Home - usually drawn ON TOP)
-            # Actually Home draws item THEN highlight.
-            
             slot_data = self.game.player.toolbar[i]
             if slot_data:
-                # Draw Item Icon (Placeholder)
-                pygame.draw.rect(screen, PURPLE, (x+2, toolbar_y+2, 28, 28))
+                # Draw Item Icon
+                icon = self.get_item_image(slot_data['name'])
+                
+                # Scale Item
+                item_size = int(TOOLBAR_SLOT_SIZE * TOOLBAR_ITEM_SCALE)
+                icon = pygame.transform.scale(icon, (item_size, item_size))
+                
+                # Center Item
+                offset = (TOOLBAR_SLOT_SIZE - item_size) // 2
+                screen.blit(icon, (x + offset, toolbar_y + offset))
                 
                 # Draw Count
                 count = slot_data['count']
@@ -475,15 +590,18 @@ class ExplorationState(GameState):
                 # Draw Name (Small)
                 name = slot_data['name']
                 name_surf = pygame.font.SysFont(None, 12).render(name[:3], True, WHITE)
-                screen.blit(name_surf, (x+2, toolbar_y+20))
+                screen.blit(name_surf, (x+2, toolbar_y + TOOLBAR_SLOT_SIZE - 12))
                 
             # Highlight selected
             if i == self.game.player.selected_slot:
                 if self.highlight_image:
-                     # Draw aligned with box
-                     screen.blit(self.highlight_image, (x - 3, toolbar_y - 3))
+                     # Draw aligned with box (Scale highlight to match)
+                     highlight_size = int(TOOLBAR_SLOT_SIZE * 1.2)
+                     offset = (highlight_size - TOOLBAR_SLOT_SIZE) // 2
+                     scaled_highlight = pygame.transform.scale(self.highlight_image, (highlight_size, highlight_size))
+                     screen.blit(scaled_highlight, (x - offset, toolbar_y - offset))
                 else:
-                     pygame.draw.rect(screen, YELLOW, (x-2, toolbar_y-2, 36, 36), 2)
+                     pygame.draw.rect(screen, YELLOW, rect.inflate(4, 4), 2)
                 
         # Draw Home Icon
         if hasattr(self, 'home_icon') and self.home_icon:
@@ -637,14 +755,17 @@ class ExplorationState(GameState):
              
              # Slider Knob (Square Button)
              travel_w = 120
-             knob_size = 20
+             knob_size = 28
              knob_center_x = bar_rect.x + 4 + int(travel_w * self.game.volume)
              knob_y = bar_rect.centery - knob_size // 2
              
              knob_rect = pygame.Rect(knob_center_x - knob_size//2, knob_y, knob_size, knob_size)
              
-             pygame.draw.rect(screen, (200, 200, 200), knob_rect) # Light Gray face
-             pygame.draw.rect(screen, WHITE, knob_rect, 2) # Border
+             if hasattr(self, 'slider_knob_image') and self.slider_knob_image:
+                  screen.blit(self.slider_knob_image, knob_rect)
+             else:
+                  pygame.draw.rect(screen, (200, 200, 200), knob_rect) # Light Gray face
+                  pygame.draw.rect(screen, WHITE, knob_rect, 2) # Border
 
     def generate_light_mask(self):
         # Create a radial gradient surface

@@ -5,6 +5,10 @@ import cv2
 import os
 import numpy as np
 
+from src.utils.ui import Button
+from src.assets import IMG_PLAY_BTN, IMG_EXIT_BTN
+import sys
+
 class OpeningState(GameState):
     def __init__(self, game):
         super().__init__(game)
@@ -26,6 +30,42 @@ class OpeningState(GameState):
                  print(f"Opening Video Loaded: {video_path}")
         else:
             print(f"Error: Video file not found at {video_path}")
+
+        # Buttons
+        self.font = pygame.font.SysFont(None, 36)
+        
+        # Play Button
+        self.play_img = None
+        if os.path.exists(IMG_PLAY_BTN):
+             self.play_img = pygame.image.load(IMG_PLAY_BTN).convert_alpha()
+             # Scale 3x (User Request)
+             w, h = self.play_img.get_size()
+             self.play_img = pygame.transform.scale(self.play_img, (w * 3, h * 3))
+        else:
+             print(f"Warning: Play Button not found at {IMG_PLAY_BTN}")
+
+        # Exit Button
+        self.exit_img = None
+        if os.path.exists(IMG_EXIT_BTN):
+             self.exit_img = pygame.image.load(IMG_EXIT_BTN).convert_alpha()
+             # Scale 3x (User Request)
+             w, h = self.exit_img.get_size()
+             self.exit_img = pygame.transform.scale(self.exit_img, (w * 3, h * 3))
+        else:
+             print(f"Warning: Exit Button not found at {IMG_EXIT_BTN}")
+
+        # Position Buttons (Center Screen, vertically stacked?)
+        # User didn't specify pos, assume Standard center
+        btn_w, btn_h = 200, 60 # Default size if no image
+        if self.play_img:
+            btn_w, btn_h = self.play_img.get_size()
+            
+        center_x = (SCREEN_WIDTH - btn_w) // 2
+        play_y = SCREEN_HEIGHT // 2 + 50
+        exit_y = play_y + btn_h + 20
+        
+        self.btn_play = Button(center_x, play_y, btn_w, btn_h, "", self.font, image=self.play_img)
+        self.btn_exit = Button(center_x, exit_y, btn_w, btn_h, "", self.font, image=self.exit_img)
             
         # Transition Logic
         self.fading_out = False
@@ -33,17 +73,16 @@ class OpeningState(GameState):
         self.fade_speed = 5
         self.fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.fade_surface.fill(BLACK)
+        self.next_action = None # 'play' or 'exit'
 
     def enter(self):
         print("Entering Opening State")
         # Restart video if needed
         if self.cap:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            
-        # Fade variables reset? 
-        # Actually usually we want fresh start.
         self.fading_out = False
         self.fade_alpha = 0
+        self.next_action = None
 
     def exit(self):
         print("Exiting Opening State")
@@ -54,19 +93,20 @@ class OpeningState(GameState):
 
     def handle_events(self, events):
         for event in events:
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1: # Left Click
-                    if not self.fading_out:
-                        self.start_fade_out()
-            
-            # Optional: Allow skipping with Key press too? User said "Click left".
-            # if event.type == pygame.KEYDOWN:
-            #     if not self.fading_out:
-            #         self.start_fade_out()
+            # Play Button
+            if self.btn_play.handle_event(event):
+                 if not self.fading_out:
+                     self.start_fade_out('play')
+                     
+            # Exit Button
+            if self.btn_exit.handle_event(event):
+                 if not self.fading_out:
+                     self.start_fade_out('exit')
 
-    def start_fade_out(self):
-        print("Starting Fade Out...")
+    def start_fade_out(self, action):
+        print(f"Starting Fade Out ({action})...")
         self.fading_out = True
+        self.next_action = action
 
     def update(self):
         # Update Video Frame
@@ -106,9 +146,14 @@ class OpeningState(GameState):
             self.fade_alpha += self.fade_speed
             if self.fade_alpha >= 255:
                 self.fade_alpha = 255
-                # Switch State
-                self.game.change_state("home")
-                self.game.states["home"].enter()
+                
+                # Execute Action
+                if self.next_action == 'play':
+                    self.game.change_state("home")
+                    self.game.states["home"].enter()
+                elif self.next_action == 'exit':
+                    pygame.quit()
+                    sys.exit()
 
     def draw(self, screen):
         # Draw Video
@@ -116,6 +161,12 @@ class OpeningState(GameState):
             screen.blit(self.frame_surface, (0, 0))
         else:
             screen.fill(BLACK)
+            
+        # Draw Buttons
+        if not self.fading_out: # Hide buttons during fade? Or keep them? Usually keep them or they fade out too.
+             # If we draw them before fade overlay, they will fade out.
+             self.btn_play.draw(screen)
+             self.btn_exit.draw(screen)
             
         # Draw Fade Overlay
         if self.fading_out and self.fade_alpha > 0:

@@ -63,8 +63,8 @@ class Player(pygame.sprite.Sprite):
         self.teleport_cooldown_end = 0.0 # Timestamp
         
         # Player Stats
-        self.rank = 4
-        self.intelligence = 24
+        self.rank = 1
+        self.intelligence = 14
         self.brain_shape = "Smooth" # Flavor text
         self.fairies_caught = 0
         
@@ -74,20 +74,34 @@ class Player(pygame.sprite.Sprite):
         # self.rank = 3 # Removed duplicate assignment
         
         # Starting Items (Dev Helper)
-        self.gold = 10000
-        self.inventory["Red Herb"] = 99
-        self.inventory["Blue Herb"] = 99
+        self.gold = 1000
+        self.inventory["Red Herb"] = 9
+        self.inventory["Blue Herb"] = 9
         self.inventory["Health Potion"] = 5
         self.inventory["Hoe"] = 1
         self.inventory["Watering Can"] = 1
-        self.inventory["Water"] = 99
+        self.inventory["Water"] = 9
         
         # Add some to toolbar for convenience
         self.toolbar[0] = {'name': 'Watering Can', 'count': 1}
         self.toolbar[1] = {'name': 'Hoe', 'count': 1}
         self.toolbar[2] = {'name': 'Health Potion', 'count': 3}
-        self.toolbar[3] = {'name': 'Intelligence Potion', 'count': 99}
+        self.toolbar[3] = {'name': 'Intelligence Potion', 'count': 9}
         self.toolbar[4] = {'name': 'Rank Up Potion', 'count': 9}
+
+        # Sounds
+        self.snd_walking_path = os.path.join(base_dir, "assets", "sounds", "sfx", "walking.wav")
+        self.walking_sound = None
+        self.is_walking_sound_playing = False
+        
+        if os.path.exists(self.snd_walking_path):
+            try:
+                self.walking_sound = pygame.mixer.Sound(self.snd_walking_path)
+                self.walking_sound.set_volume(0.4) # Not too loud
+            except Exception as e:
+                print(f"Error loading walking sound: {e}")
+        else:
+            print(f"Warning: Walking sound not found at {self.snd_walking_path}")
     
     @staticmethod
     def get_frame(sheet, frame_width, frame_height, fx, fy):
@@ -158,10 +172,20 @@ class Player(pygame.sprite.Sprite):
                 self.frame_timer = 0
                 self.current_frame = (self.current_frame + 1) % len(self.current_anim)
                 self.image = self.current_anim[self.current_frame]
+            
+            # Sound Logic
+            if self.walking_sound and not self.is_walking_sound_playing:
+                self.walking_sound.play(-1) # Loop indefinitely
+                self.is_walking_sound_playing = True
         else:
             # Idle → frame ke-0
             self.current_frame = 0
             self.image = self.current_anim[0]
+            
+            # Stop Sound
+            if self.walking_sound and self.is_walking_sound_playing:
+                self.walking_sound.stop()
+                self.is_walking_sound_playing = False
 
     def add_item(self, item_name):
         # Check toolbar first

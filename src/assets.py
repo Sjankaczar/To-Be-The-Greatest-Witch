@@ -23,9 +23,14 @@ IMG_BUTTON_PRESSED = os.path.join(UI_DIR, "ButtonPressed.png")
 IMG_SLIDER = os.path.join(UI_DIR, "slider.png")
 IMG_VALUE_BAR = os.path.join(UI_DIR, "ValueBar_128x16.png")
 IMG_VALUE_BLUE = os.path.join(UI_DIR, "ValueBlue_120x8.png")
+IMG_PLAY_BTN = os.path.join(UI_DIR, "play button.png")
+IMG_EXIT_BTN = os.path.join(UI_DIR, "exit button.png")
+IMG_BUTTERFLY = os.path.join(UI_DIR, "butterfly.png")
 
 # Maps
 MAP_HOME = os.path.join(MAPS_DIR, "halaman.tmx")
+MAP_ROOM = os.path.join(MAPS_DIR, "room.tmx")
+MAP_FOREST = os.path.join(MAPS_DIR, "forest.tmx")
 
 # Audio
 AUDIO_DIR = os.path.join(ASSETS_DIR, "sounds")

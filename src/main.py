@@ -3,9 +3,9 @@ import sys
 from src.config import *
 from src.entities.player import Player
 from src.states.home import HomeState
-from src.states.home import HomeState
 from src.states.exploration import ExplorationState
 from src.states.opening import OpeningState
+from src.states.room import RoomState
 from src.assets import AUDIO_BGM
 import os
 
@@ -30,13 +30,14 @@ class Game:
         else:
             print(f"Warning: BGM not found at {AUDIO_BGM}")
         
-        self.player = Player(100, 100)
+        self.player = Player(90, 165)
         # self.gold moved to player.gold
         
         self.states = {
             "home": HomeState(self),
             "exploration": ExplorationState(self),
-            "opening": OpeningState(self)
+            "opening": OpeningState(self),
+            "room": RoomState(self)
         }
         
         if SHOW_OPENING_SCREEN:

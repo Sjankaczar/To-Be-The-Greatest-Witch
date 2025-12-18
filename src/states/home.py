@@ -16,10 +16,12 @@ from pytmx.util_pygame import load_pygame
 from src.utils.bitmap_font import BitmapFont
 from pytmx.util_pygame import load_pygame
 from src.assets import MAP_HOME, IMG_STATS_BG, IMG_HOTKEY_BOX, IMG_HIGHLIGHT_SLOT, IMG_TEMPLATE_BOX, IMG_QUIT_ICON, IMG_BUTTON, IMG_BUTTON_PRESSED, IMG_SLIDER, IMG_VALUE_BAR, IMG_VALUE_BLUE
+from src.entities.item import Item
 
 # Local Asset Path for Settings
 base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-IMG_SETTINGS_BTN = os.path.join(base_dir, "UI The Greatest Witch", "settings_button.png")
+IMG_SETTINGS_BTN = os.path.join(base_dir, "UI The Greatest Witch", "settings_UI.png")
+IMG_SLIDER_KNOB = os.path.join(base_dir, "UI The Greatest Witch", "CornerKnot_14x14.png")
 
 class HomeState(GameState):
     def __init__(self, game):
@@ -61,12 +63,12 @@ class HomeState(GameState):
         self.command_mode = False
         
         # Initialize Player Position in Home
-        self.game.player.rect.topleft = (90, 120)
+        self.game.player.rect.topleft = (90, 165)
         
         # Buildings (Positions relative to map)
         self.portal_rect = pygame.Rect(425, 137, 100, 60) # Center (475, 167)
         self.crafting_rect = pygame.Rect(13, 293, 80, 100) # Center (53, 343)
-        self.shop_rect = pygame.Rect(435, 20, 80, 100) # Center (475, 70)
+        self.shop_rect = pygame.Rect(210, 16, 44, 14) # Hidden Shop Area (210,16) to (254,30)
         self.research_rect = pygame.Rect(150, 310, 100, 80) # Center (200, 350)
         
         self.show_recipes = False
@@ -111,6 +113,9 @@ class HomeState(GameState):
         self.btn_close_research = Button(0, 0, 30, 30, "", self.font, color=RED, text_color=WHITE, image=self.quit_icon_image)
         self.btn_close_inventory = Button(0, 0, 30, 30, "", self.font, color=RED, text_color=WHITE, image=self.quit_icon_image)
         
+        # Cache for Item Sprites
+        self.item_images = {}
+        
         # Crafting UI State
         self.selected_recipe = None
         self.crafting_timer = 0
@@ -129,6 +134,22 @@ class HomeState(GameState):
         self.update_recipe_list()
             
         self.btn_craft = Button(450, 400, 100, 40, "Craft", self.font, color=DARK_GREEN, text_color=WHITE, image=self.button_image, image_pressed=self.button_pressed_image)
+
+    def get_item_image(self, name):
+        if name not in self.item_images:
+            # Create dummy item to load sprite
+            # Position doesn't matter
+            try:
+                temp_item = Item(0, 0, name)
+                self.item_images[name] = temp_item.image
+            except Exception as e:
+                print(f"Error loading icon for {name}: {e}")
+                # Create fallback surface
+                s = pygame.Surface((32, 32))
+                s.fill((128, 0, 128)) # Purple
+                self.item_images[name] = s
+            
+        return self.item_images[name]
 
     def update_recipe_list(self):
         self.recipe_buttons = []
@@ -172,11 +193,11 @@ class HomeState(GameState):
         if os.path.exists(IMG_SETTINGS_BTN):
              self.settings_btn_image = pygame.image.load(IMG_SETTINGS_BTN).convert_alpha()
              # Scale if needed
-             self.settings_btn_image = pygame.transform.scale(self.settings_btn_image, (32, 32))
+             self.settings_btn_image = pygame.transform.scale(self.settings_btn_image, (80, 80))
         else:
              print(f"Warning: Settings Btn not found at {IMG_SETTINGS_BTN}")
              
-        self.btn_settings = Button(0, 0, 32, 32, "", self.font, color=GRAY, image=self.settings_btn_image)
+        self.btn_settings = Button(0, 0, 80, 80, "", self.font, color=GRAY, image=self.settings_btn_image)
         
         # Volume Slider
         self.slider_image = None
@@ -185,10 +206,13 @@ class HomeState(GameState):
         else:
              print(f"Warning: Slider not found at {IMG_SLIDER}")
 
-        # Volume Bar Images
-        self.value_bar_image = None
         if os.path.exists(IMG_VALUE_BAR):
              self.value_bar_image = pygame.image.load(IMG_VALUE_BAR).convert_alpha()
+             
+        self.slider_knob_image = None
+        if os.path.exists(IMG_SLIDER_KNOB):
+             self.slider_knob_image = pygame.image.load(IMG_SLIDER_KNOB).convert_alpha()
+             self.slider_knob_image = pygame.transform.scale(self.slider_knob_image, (28, 28))
         else:
              print(f"Warning: ValueBar not found at {IMG_VALUE_BAR}")
              
@@ -271,9 +295,9 @@ class HomeState(GameState):
 
     def enter(self):
         print("Entering Home State")
-        if hasattr(self, 'last_player_pos') and self.last_player_pos is not None:
-             self.game.player.rect.topleft = self.last_player_pos
-             print(f"Restored player position to {self.last_player_pos}")
+        # Always force player to start at specific position
+        self.game.player.rect.topleft = (90, 165)
+        print(f"Set player position to (90, 165)")
 
     def handle_events(self, events):
         for event in events:
@@ -532,17 +556,12 @@ class HomeState(GameState):
             if event.type == pygame.KEYDOWN and event.key == pygame.K_f:
                 # Check collisions using game.player.rect
                 player_rect = self.game.player.rect
-                if player_rect.colliderect(self.portal_rect):
-                    self.last_player_pos = self.game.player.rect.topleft
-                    print(f"Saved player position {self.last_player_pos} before exploring")
-                    self.game.states["exploration"].enter()
-                    self.game.change_state("exploration")
-                elif player_rect.colliderect(self.crafting_rect):
+                if player_rect.colliderect(self.crafting_rect):
                     self.show_recipes = True
                     print("Opened Crafting Station")
                 elif player_rect.colliderect(self.shop_rect):
                     self.show_shop = True
-                    self.show_inventory = True # Open inventory too for convenience
+                    # self.show_inventory = True # User requested to NOT open inventory
                     print("Opened Shop")
                 elif player_rect.colliderect(self.research_rect):
                     if self.game.player.rank >= 4:
@@ -819,9 +838,31 @@ class HomeState(GameState):
         self.golems.update()
         
         # Update Player (Movement & Animation)
+        # Update Player (Movement & Animation)
         prev_rect = self.game.player.rect.copy()
-        self.game.player.update()
         
+        if self.command_mode:
+             self.handle_command_mode_input()
+        else:
+            self.game.player.update()
+            
+            # Check for Room Teleport (Specific Coordinates)
+            px, py = self.game.player.rect.topleft
+            if (px == 90 or px == 91) and (py == 119 or py == 120):
+                print(f"Teleporting to Room from {px},{py}")
+                self.game.states["room"].enter()
+                self.game.change_state("room")
+
+            # Check for Portal Teleport (Exploration) - Automatic Trigger
+            # Line (462, 149) to (462, 174)
+            portal_trigger = pygame.Rect(462, 149, 5, 25)
+            if self.game.player.rect.colliderect(portal_trigger):
+                self.last_player_pos = self.game.player.rect.topleft
+                print(f"Auto-entering Exploration from {self.last_player_pos}")
+                self.game.player.rect.topleft = (0, 70) # Set spawn point
+                self.game.states["exploration"].enter()
+                self.game.change_state("exploration")
+
         # Validate Position
         player_center = self.game.player.rect.center
         in_base = (0 <= player_center[0] < self.base_map_width) and (0 <= player_center[1] < self.base_map_height)
@@ -842,11 +883,19 @@ class HomeState(GameState):
             
         # Invisible Barrier Check
         # Area: (60, 102) to (132, 119) -> Rect(60, 102, 72, 17)
-        barrier_rect = pygame.Rect(60, 102, 72, 17)
-        if self.game.player.rect.colliderect(barrier_rect):
-             # Collision with barrier, revert
-             self.game.player.rect = prev_rect
-             
+        # New Barrier: Center at (320, 89)
+        # Size 29x29 -> TopLeft (320-14, 89-14) = (306, 75)
+        barriers = [
+            pygame.Rect(60, 102, 72, 17),
+            pygame.Rect(345, 112, 8, 2)
+        ]
+        
+        for barrier in barriers:
+             if self.game.player.rect.colliderect(barrier):
+                  # Collision with barrier, revert
+                  self.game.player.rect = prev_rect
+                  break
+                  
         # Clamp Player Y to 0 (Prevent negative Y / Void walking)
         # Force clamp rect AND position properties if any
         if self.game.player.rect.top < 16:
@@ -924,8 +973,8 @@ class HomeState(GameState):
             
             # Update Buttons
             # Tabs
-            self.btn_shop_buy_tab.rect.topleft = (screen_rect.x + 20, screen_rect.y + 40)
-            self.btn_shop_sell_tab.rect.topleft = (screen_rect.x + 130, screen_rect.y + 40)
+            self.btn_shop_buy_tab.rect.topleft = (screen_rect.x + 45, screen_rect.y + 40)
+            self.btn_shop_sell_tab.rect.topleft = (screen_rect.x + 155, screen_rect.y + 40)
             
             # List Items
             start_y = screen_rect.y + 80
@@ -1088,20 +1137,20 @@ class HomeState(GameState):
                                 pygame.draw.circle(screen, crop_color, (center[0] + self.camera.camera.x, center[1] + self.camera.camera.y), int(radius))
                 
                  # Draw Buildings (World Space)
-                 # Portal
-                 pygame.draw.rect(screen, (100, 0, 100), self.camera.apply_rect(self.portal_rect))
-                 portal_text = self.font.render("Portal", True, WHITE)
-                 screen.blit(portal_text, (self.portal_rect.centerx - 20 + self.camera.camera.x, self.portal_rect.centery - 10 + self.camera.camera.y))
+                 # Portal - Removed visual as per user request
+                 # pygame.draw.rect(screen, (100, 0, 100), self.camera.apply_rect(self.portal_rect))
+                 # portal_text = self.font.render("Portal", True, WHITE)
+                 # screen.blit(portal_text, (self.portal_rect.centerx - 20 + self.camera.camera.x, self.portal_rect.centery - 10 + self.camera.camera.y))
                  
                  # Crafting
                  pygame.draw.rect(screen, (139, 69, 19), self.camera.apply_rect(self.crafting_rect)) # Brown
                  craft_text = self.font.render("Crafting", True, WHITE)
                  screen.blit(craft_text, (self.crafting_rect.centerx - 30 + self.camera.camera.x, self.crafting_rect.centery - 10 + self.camera.camera.y))
                  
-                 # Shop
-                 pygame.draw.rect(screen, (218, 165, 32), self.camera.apply_rect(self.shop_rect)) # Goldenrod
-                 shop_text = self.font.render("Shop", True, WHITE)
-                 screen.blit(shop_text, (self.shop_rect.centerx - 20 + self.camera.camera.x, self.shop_rect.centery - 10 + self.camera.camera.y))
+                 # Shop - Hidden/Transparent as per request
+                 # pygame.draw.rect(screen, (218, 165, 32), self.camera.apply_rect(self.shop_rect)) # Goldenrod
+                 # shop_text = self.font.render("Shop", True, WHITE)
+                 # screen.blit(shop_text, (self.shop_rect.centerx - 20 + self.camera.camera.x, self.shop_rect.centery - 10 + self.camera.camera.y))
                  
                  # Research
                  pygame.draw.rect(screen, (70, 130, 180), self.camera.apply_rect(self.research_rect)) # Steel Blue
@@ -1246,7 +1295,7 @@ class HomeState(GameState):
         # Button 32x32.
         # Padding 10px.
         settings_x = stats_x
-        settings_y = stats_y - 32 - 10
+        settings_y = stats_y - 80 - 10
         self.btn_settings.rect.topleft = (settings_x, settings_y)
         self.btn_settings.draw(screen)
         
@@ -1316,15 +1365,18 @@ class HomeState(GameState):
              # Slider knob usually centers on the current value point.
              # Range is from x+4 to x+4+120 (120px travel).
              travel_w = 120
-             knob_size = 20
+             knob_size = 28
              # Knob X center matches value
              knob_center_x = bar_rect.x + 4 + int(travel_w * self.game.volume)
              knob_y = bar_rect.centery - knob_size // 2
              
              knob_rect = pygame.Rect(knob_center_x - knob_size//2, knob_y, knob_size, knob_size)
              
-             pygame.draw.rect(screen, (200, 200, 200), knob_rect) # Light Gray face
-             pygame.draw.rect(screen, WHITE, knob_rect, 2) # Border
+             if hasattr(self, 'slider_knob_image') and self.slider_knob_image:
+                  screen.blit(self.slider_knob_image, knob_rect)
+             else:
+                  pygame.draw.rect(screen, (200, 200, 200), knob_rect)
+                  pygame.draw.rect(screen, WHITE, knob_rect, 2)
 
         if self.command_mode:
             cmd_text = self.font.render("COMMAND MODE (Click to Expand)", True, (255, 255, 0))
@@ -1700,8 +1752,11 @@ class HomeState(GameState):
                     item_x = center_x - item_size // 2
                     item_y = center_y - item_size // 2
                     
-                    # Placeholder Item Icon
-                    pygame.draw.rect(screen, PURPLE, (item_x, item_y, item_size, item_size))
+                    # Draw Sprite
+                    icon = self.get_item_image(item_name)
+                    # Center it
+                    icon_rect = icon.get_rect(center=(center_x, center_y))
+                    screen.blit(icon, icon_rect)
                     
                     # Draw Count (Bottom Right of item area)
                     count_text = self.font.render(str(count), True, WHITE)
@@ -1716,24 +1771,36 @@ class HomeState(GameState):
             self.btn_close_inventory.draw(screen)
 
         # Persistent Toolbar (Screen Space - Bottom Center)
-        toolbar_start_x = (SCREEN_WIDTH - (9 * 40)) // 2
-        toolbar_y = SCREEN_HEIGHT - 50
+        # Calculate Start X based on Config
+        total_width = (9 * TOOLBAR_SLOT_SIZE) + (8 * TOOLBAR_SPACING)
+        toolbar_start_x = (SCREEN_WIDTH - total_width) // 2 + TOOLBAR_X_SHIFT
+        toolbar_y = SCREEN_HEIGHT - TOOLBAR_Y_OFFSET
         
         for i in range(9):
-            x = toolbar_start_x + i * 40
-            rect = pygame.Rect(x, toolbar_y, 32, 32)
+            x = toolbar_start_x + i * (TOOLBAR_SLOT_SIZE + TOOLBAR_SPACING)
+            rect = pygame.Rect(x, toolbar_y, TOOLBAR_SLOT_SIZE, TOOLBAR_SLOT_SIZE)
             
             # Draw Slot Background
             if self.toolbar_box_image:
-                 screen.blit(self.toolbar_box_image, (x, toolbar_y))
+                 # Scale box to new size
+                 scaled_box = pygame.transform.scale(self.toolbar_box_image, (TOOLBAR_SLOT_SIZE, TOOLBAR_SLOT_SIZE))
+                 screen.blit(scaled_box, (x, toolbar_y))
             else:
                  pygame.draw.rect(screen, BLACK, rect)
                  pygame.draw.rect(screen, WHITE, rect, 1)
 
             slot_data = self.game.player.toolbar[i]
             if slot_data:
-                # Draw Item Icon (Placeholder)
-                pygame.draw.rect(screen, PURPLE, pygame.Rect(x+2, toolbar_y+2, 28, 28))
+                # Draw Item Icon
+                icon = self.get_item_image(slot_data['name'])
+                
+                # Scale Item
+                item_size = int(TOOLBAR_SLOT_SIZE * TOOLBAR_ITEM_SCALE)
+                icon = pygame.transform.scale(icon, (item_size, item_size))
+                
+                # Center Item
+                offset = (TOOLBAR_SLOT_SIZE - item_size) // 2
+                screen.blit(icon, (x + offset, toolbar_y + offset))
                 
                 # Draw Count
                 count = slot_data['count']
@@ -1742,21 +1809,25 @@ class HomeState(GameState):
                 
                 # Draw Name (Small)
                 name = slot_data['name']
-                # Use pre-loaded small font if available, else create (but try to add it to init)
+                # Use pre-loaded small font if available
                 if not hasattr(self, 'small_font'):
                     self.small_font = pygame.font.SysFont(None, 12)
                 name_surf = self.small_font.render(name[:3], True, WHITE)
-                screen.blit(name_surf, (x+2, toolbar_y+20))
+                screen.blit(name_surf, (x+2, toolbar_y + TOOLBAR_SLOT_SIZE - 12))
 
             # Highlight selected (Drawn ON TOP of item)
             if i == self.game.player.selected_slot:
                 if self.highlight_image:
-                    # Draw aligned with box (Centered over 34x34 box)
-                    screen.blit(self.highlight_image, (x - 3, toolbar_y - 3))
+                    # Draw aligned with box (Scale highlight to match)
+                    # Highlight is usually slightly larger
+                    highlight_size = int(TOOLBAR_SLOT_SIZE * 1.2)
+                    offset = (highlight_size - TOOLBAR_SLOT_SIZE) // 2
+                    scaled_highlight = pygame.transform.scale(self.highlight_image, (highlight_size, highlight_size))
+                    screen.blit(scaled_highlight, (x - offset, toolbar_y - offset))
                 else:
                     try:
-                        # Fallback
-                        highlight_rect = pygame.Rect(x-2, toolbar_y-2, 38, 38)
+                         # Fallback
+                        highlight_rect = rect.inflate(4, 4)
                         pygame.draw.rect(screen, YELLOW, highlight_rect, 2)
                     except Exception as e:
                         print(f"Error drawing highlight: {e}")
